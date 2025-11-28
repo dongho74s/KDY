@@ -25,18 +25,21 @@ DESIRES = {
     LaneChangeState.preLaneChange: log.Desire.none,
     LaneChangeState.laneChangeStarting: log.Desire.none,
     LaneChangeState.laneChangeFinishing: log.Desire.none,
+    LaneChangeState.laneChangeMerging: log.Desire.none,
   },
   LaneChangeDirection.left: {
     LaneChangeState.off: log.Desire.none,
     LaneChangeState.preLaneChange: log.Desire.none,
     LaneChangeState.laneChangeStarting: log.Desire.laneChangeLeft,
     LaneChangeState.laneChangeFinishing: log.Desire.laneChangeLeft,
+    LaneChangeState.laneChangeMerging: log.Desire.laneChangeLeft,
   },
   LaneChangeDirection.right: {
     LaneChangeState.off: log.Desire.none,
     LaneChangeState.preLaneChange: log.Desire.none,
     LaneChangeState.laneChangeStarting: log.Desire.laneChangeRight,
     LaneChangeState.laneChangeFinishing: log.Desire.laneChangeRight,
+    LaneChangeState.laneChangeMerging: log.Desire.laneChangeRight,
   },
 }
 TURN_DESIRES = {
@@ -410,8 +413,11 @@ class DesireHelper:
         # fade out over .5s
         self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
 
+        if 0.3 > self.lane_change_ll_prob >= 0.01:
+          self.lane_change_state = LaneChangeState.laneChangeMerging
+
         # 98% certainty
-        if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
+        if self.lane_change_ll_prob < 0.01:
           self.lane_change_state = LaneChangeState.laneChangeFinishing
 
       # LaneChangeState.laneChangeFinishing
@@ -455,7 +461,7 @@ class DesireHelper:
     #self.desireLog = f"rlane={self.distance_to_road_edge_right:.1f},{self.distance_to_road_edge_right_far:.1f}"
 
     # Send keep pulse once per second during LaneChangeStart.preLaneChange
-    if self.lane_change_state in (LaneChangeState.off, LaneChangeState.laneChangeStarting):
+    if self.lane_change_state in (LaneChangeState.off, LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeMerging):
       self.keep_pulse_timer = 0.0
     elif self.lane_change_state == LaneChangeState.preLaneChange:
       self.keep_pulse_timer += DT_MDL

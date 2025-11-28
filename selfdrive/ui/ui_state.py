@@ -162,6 +162,9 @@ class UIState:
     self.cruise_gap: int = self.params.get("LongitudinalPersonality") + 1
     self.debug_msg: int = self.params.get("ShowDebugUI")
     self.camera_scc: int = self.params.get("HyundaiCameraSCC")
+    self.show_radar_info: int = self.params.get("ShowRadarInfo")
+    self.radar_lat_factor: int = self.params.get("RadarLatFactor")
+    self.show_plot_mode: int = self.params.get("ShowPlotMode")
 
     # Carrot
     self.active_carrot: int = 0
@@ -233,6 +236,7 @@ class UIState:
     self.recording_audio = self.params.get_bool("RecordAudio") and self.started
 
     self.is_metric = self.params.get_bool("IsMetric")
+    self.always_on_dm = self.params.get_bool("AlwaysOnDM")
 
     # Kisa states update
     if self.sm.updated["deviceState"]:
@@ -377,6 +381,14 @@ class UIState:
         self.has_longitudinal_control = self.params.get_bool("AlphaLongitudinalEnabled")
       else:
         self.has_longitudinal_control = self.CP.openpilotLongitudinalControl
+
+    # Update user params
+    self.show_ui_bsm = self.params.get_bool("KisaBlindSpotDetect")
+    self.debug_msg = self.params.get("ShowDebugUI")
+    self.show_radar_info = self.params.get("ShowRadarInfo")
+    self.radar_lat_factor = self.params.get("RadarLatFactor")
+    self.show_plot_mode = self.params.get("ShowPlotMode")
+
     self._param_update_time = time.monotonic()
 
 

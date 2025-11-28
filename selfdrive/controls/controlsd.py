@@ -293,6 +293,8 @@ class Controls:
     if self.sm.valid['driverAssistance']:
       hudControl.leftLaneDepart = self.sm['driverAssistance'].leftLaneDeparture
       hudControl.rightLaneDepart = self.sm['driverAssistance'].rightLaneDeparture
+    
+    hudControl.e2eX = self.sm['longitudinalPlan'].e2eX
 
     CO = self.sm['carOutput']
     if self.sm['selfdriveState'].active:
@@ -321,6 +323,7 @@ class Controls:
     cs.forceDecel = bool((self.sm['driverMonitoringState'].awarenessStatus < 0. and self.params.get("DisableDM") == 0) or
                          (self.sm['selfdriveState'].state == State.softDisabling))
 
+    CC.e2eStandstill = bool(CO.actuatorsOutput.e2eStandstill)
     lat_tuning = self.CP.lateralTuning.which()
     if self.CP.steerControlType == car.CarParams.SteerControlType.angle:
       cs.lateralControlState.angleState = lac_log

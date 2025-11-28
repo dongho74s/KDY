@@ -98,6 +98,15 @@ class CarController(CarControllerBase):
     self.camera_scc_params = Params().get("HyundaiCameraSCC")
     self.is_ldws_car = Params().get_bool("IsLdwsCar")
 
+    self.traffic_detection_mode = Params().get("TrafficLightDetectMode")
+
+    self.e2e_standstill = False
+    self.e2e_standstill_stat = False
+    self.e2e_standstill_timer = 0
+    self.e2e_standstill_timer2 = 0
+    self.e2e_standstill_timer_buf = 0
+    self.e2e_x = 0
+
     self.steerDeltaUpOrg = self.steerDeltaUp = self.steerDeltaUpLC = self.params.STEER_DELTA_UP
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
 
@@ -143,9 +152,15 @@ class CarController(CarControllerBase):
 
       self.canfd_debug = params.get("CanfdDebug")
       self.camera_scc_params = params.get("HyundaiCameraSCC")
+      self.traffic_detection_mode = Params().get("TrafficLightDetectMode")
 
     actuators = CC.actuators
     hud_control = CC.hudControl
+
+    try:
+      self.e2e_x = hud_control.e2eX[12]
+    except:
+      self.e2e_x = 0
 
     if hud_control.modelDesire in [3,4]:
       self.params.STEER_DELTA_UP = self.steerDeltaUpLC
@@ -366,11 +381,47 @@ class CarController(CarControllerBase):
       if self.frame % 50 == 0 and self.CP.openpilotLongitudinalControl and not camera_scc:
         can_sends.append(hyundaican.create_frt_radar_opt(self.packer))
 
+    if CS.out.cruiseState.enabled:
+      self.e2e_standstill = False
+      self.e2e_standstill_stat = False
+      self.e2e_standstill_timer = 0
+      self.e2e_standstill_timer2 = 0
+      self.e2e_standstill_timer_buf = 0
+    else:
+      if self.e2e_standstill: # 1초동안 출발 이벤트 보냄
+        self.e2e_standstill_timer += 1
+        if self.e2e_standstill_timer > 100:
+          self.e2e_standstill = False
+          self.e2e_standstill_timer = 0
+      elif CS.out.vEgo > 0.2: # 움직일때
+        self.e2e_standstill = False
+        self.e2e_standstill_stat = False
+        self.e2e_standstill_timer = 0
+        self.e2e_standstill_timer2 = 0
+        self.e2e_standstill_timer_buf = 0
+      elif self.e2e_standstill_stat and self.e2e_x > (40 if 0 < CS.out.radarDRel < 15 else 25) and CS.out.vEgo < 0.2: # 신호가 바뀌면 이벤트 발생
+        self.e2e_standstill_timer2 += 1
+        if self.e2e_standstill_timer2 > 20 and not CS.out.gasPressed:
+          self.e2e_standstill_timer2 = 0
+          self.e2e_standstill = True
+          self.e2e_standstill_stat = False
+          self.e2e_standstill_timer = 0
+          self.e2e_standstill_timer_buf += 500 # 멈췄는데 다른 이벤트로 e2eX가 변한경우 5초 추가
+      elif 0 < self.e2e_x < 10 and CS.out.vEgo == 0: # 멈췄을때
+        self.e2e_standstill_timer += 1
+        self.e2e_standstill_timer2 = 0
+        if self.e2e_standstill_timer > (100 + self.e2e_standstill_timer_buf): # 멈추고 1초+(5초) 후 standstill상태
+          self.e2e_standstill_stat = True
+      else:
+        self.e2e_standstill_timer = 0
+        self.e2e_standstill_timer_buf = 0
+
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX
     new_actuators.torqueOutputCan = apply_torque
     new_actuators.steeringAngleDeg = float(apply_angle)
     new_actuators.accel = accel
+    new_actuators.e2eStandstill = self.e2e_standstill
 
     self.frame += 1
     return new_actuators, can_sends

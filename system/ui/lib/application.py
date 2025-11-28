@@ -19,6 +19,12 @@ from openpilot.system.hardware import HARDWARE, PC
 from openpilot.system.ui.lib.multilang import multilang
 from openpilot.common.realtime import Ratekeeper
 
+from openpilot.common.params import Params
+import subprocess
+from pathlib import Path
+from datetime import datetime, timedelta
+from queue import Queue, Full, Empty
+
 _DEFAULT_FPS = int(os.getenv("FPS", {'tizi': 20}.get(HARDWARE.get_device_type(), 60)))
 FPS_LOG_INTERVAL = 5  # Seconds between logging FPS drops
 FPS_DROP_THRESHOLD = 0.9  # FPS drop threshold for triggering a warning
@@ -185,7 +191,6 @@ class MouseState:
           self._events.append(ev)
         self._prev_mouse_event[slot] = ev
 
-
 class GuiApplication:
   def __init__(self, width: int | None = None, height: int | None = None):
     self._fonts: dict[FontWeight, rl.Font] = {}
@@ -199,8 +204,10 @@ class GuiApplication:
 
     self._scaled_width = int(self._width * self._scale)
     self._scaled_height = int(self._height * self._scale)
+
     self._render_texture: rl.RenderTexture | None = None
     self._burn_in_shader: rl.Shader | None = None
+
     self._textures: dict[str, rl.Texture] = {}
     self._target_fps: int = _DEFAULT_FPS
     self._last_fps_log_time: float = time.monotonic()
@@ -224,6 +231,163 @@ class GuiApplication:
     self._profile_render_frames = PROFILE_RENDER
     self._render_profiler = None
     self._render_profile_start_time = None
+
+    # Kisa Rec
+    self._scaled_width += self._scaled_width % 2
+    self._scaled_height += self._scaled_height % 2
+    self._kisa_recorder: subprocess.Popen | None = None
+    self._kisa_record_start_time: datetime | None = None
+    self._kisa_record_file: Path | None = None
+    self._kisa_record_interval = timedelta(minutes=10) # 10 minutes per video
+    self._video_dir = Path("/data/media/0/videos")
+    self._video_dir.mkdir(parents=True, exist_ok=True)
+    self._params = Params()
+    self.RecordingRunning: bool = False
+    self._last_recording_check = 0.0
+    self._frame_counter = 0
+    self._desired_record_fps = 15 # recording fps
+    #self._kisa_record_sample_interval = 1.0 / float(self._desired_record_fps)
+    #self._last_record_capture_time: float = 0.0
+    queue_max_frames = self._desired_record_fps * 3
+    self._kisa_record_queue: Queue[bytes] = Queue(maxsize=queue_max_frames)
+    self._writer_thread: threading.Thread | None = None
+    self._kisa_record_fail_count: int = 0
+    self._kisa_record_fail_threshold: int = 10
+    self._kisa_record_texture: rl.RenderTexture | None = None
+    self._target_width = 1080
+    self._target_height = 540
+
+  def _start_recording(self):
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    self._kisa_record_file = self._video_dir / f"{timestamp}.mp4"
+    self._kisa_record_start_time = datetime.now()
+
+    ffmpeg_cmd = [
+      'ffmpeg',
+      '-v', 'warning',          # Reduce ffmpeg log spam
+      #'-stats',                 # Show encoding progress
+      '-f', 'rawvideo',         # Input format
+      '-pix_fmt', 'rgba',       # Input pixel format
+      '-s', f'{self._target_width}x{self._target_height}',  # Input resolution
+      '-r', str(self._target_fps),           # Input frame rate
+      '-i', 'pipe:0',           # Input from stdin
+      '-vf', 'vflip, format=yuv420p',  # Flip vertically and convert rgba to yuv420p
+      '-c:v', 'libx264',        # Video codec
+      '-preset', 'ultrafast',   # Encoding speed
+      '-crf', '28',             # video quality(0~51), 0=best, 51=worst, default: 23
+      '-vsync', '2',            # Vsync
+      '-y',                     # Overwrite existing file
+      '-f', 'mp4',              # Output format
+      str(self._kisa_record_file)
+    ]
+    print(f"Start recording → {self._kisa_record_file}")
+    self._kisa_recorder = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
+    #self._last_record_capture_time = time.monotonic()
+    self._kisa_record_fail_count = 0
+
+    with self._kisa_record_queue.mutex:
+      self._kisa_record_queue.queue.clear()
+
+    # writer worker - consumes frames from the queue and writes to ffmpeg
+    def writer_worker():
+      cloudlog.info("record writer thread started")
+      while True:
+        if self._kisa_recorder is None:
+          break
+        if self._kisa_recorder.poll() is not None and self._kisa_record_queue.empty():
+          break
+        try:
+          frame = self._kisa_record_queue.get(timeout=0.5)
+        except Empty:
+          continue
+        try:
+          if self._kisa_recorder and self._kisa_recorder.stdin:
+            try:
+              self._kisa_recorder.stdin.write(frame)
+            except Exception as e:
+              cloudlog.error(f"writer_worker: ffmpeg write error: {e}")
+              try:
+                self._stop_recording()
+              except Exception:
+                pass
+              break
+        finally:
+          try:
+            self._kisa_record_queue.task_done()
+          except Exception:
+            pass
+
+      cloudlog.info("record writer thread exiting")
+
+    self._writer_thread = threading.Thread(target=writer_worker, daemon=True)
+    self._writer_thread.start()
+
+  def _stop_recording(self):
+    if self._kisa_recorder is not None:
+      try:
+        if self._kisa_recorder.stdin:
+          try:
+            self._kisa_recorder.stdin.flush()
+            self._kisa_recorder.stdin.close()
+          except Exception:
+            pass
+
+        self._kisa_recorder.wait(timeout=5)
+      except subprocess.TimeoutExpired:
+        try:
+          self._kisa_recorder.terminate()
+          self._kisa_recorder.wait()
+        except Exception:
+          pass
+      finally:
+        self._kisa_recorder = None
+
+    if self._writer_thread is not None and self._writer_thread.is_alive():
+      self._writer_thread.join(timeout=2)
+    self._writer_thread = None
+
+    with self._kisa_record_queue.mutex:
+      self._kisa_record_queue.queue.clear()
+
+  def _update_recording(self):
+    running = self._params.get_bool("RecordingRunning")
+
+    if running:
+      if self._kisa_recorder is None:
+        self._start_recording()
+    else:
+      if self._kisa_recorder is not None:
+        self._stop_recording()
+
+  def _rollover_recording_if_needed(self):
+    if self._kisa_record_start_time and datetime.now() - self._kisa_record_start_time >= self._kisa_record_interval:
+      cloudlog.info("Rolling over recording to new file")
+      self._stop_recording()
+      self._start_recording()
+
+  def _write_frame(self, frame_bytes: bytes):
+    if self._kisa_recorder is None:
+      return
+
+    if self._writer_thread is not None and self._writer_thread.is_alive():
+      try:
+        self._kisa_record_queue.put_nowait(frame_bytes)
+      except Full:
+        try:
+          _ = self._kisa_record_queue.get_nowait()
+          self._kisa_record_queue.task_done()
+          self._kisa_record_queue.put_nowait(frame_bytes)
+        except Exception:
+          cloudlog.warning("record queue full - dropped frame in _write_frame")
+    else:
+      try:
+        if self._kisa_record_start_time and datetime.now() - self._kisa_record_start_time >= self._kisa_record_interval:
+          self._stop_recording()
+          self._start_recording()
+        self._kisa_recorder.stdin.write(frame_bytes)
+        self._kisa_recorder.stdin.flush()
+      except Exception:
+        self._stop_recording()
 
   @property
   def frame(self):
@@ -259,12 +423,14 @@ class GuiApplication:
       rl.set_config_flags(flags)
 
       rl.init_window(self._scaled_width, self._scaled_height, title)
-      needs_render_texture = self._scale != 1.0 or BURN_IN_MODE
+      needs_render_texture = self._scale != 1.0 or BURN_IN_MODE or True
       if self._scale != 1.0:
         rl.set_mouse_scale(1 / self._scale, 1 / self._scale)
       if needs_render_texture:
         self._render_texture = rl.load_render_texture(self._width, self._height)
         rl.set_texture_filter(self._render_texture.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+        self._kisa_record_texture = rl.load_render_texture(self._target_width, self._target_height)
+
       rl.set_target_fps(fps)
 
       self._target_fps = fps
@@ -388,12 +554,18 @@ class GuiApplication:
       rl.unload_render_texture(self._render_texture)
       self._render_texture = None
 
+    if self._kisa_record_texture is not None:
+      rl.unload_render_texture(self._kisa_record_texture)
+      self._kisa_record_texture = None
+
     if self._burn_in_shader:
       rl.unload_shader(self._burn_in_shader)
       self._burn_in_shader = None
 
     if not PC:
       self._mouse.stop()
+
+    self._stop_recording()
 
     rl.close_window()
 
@@ -414,6 +586,14 @@ class GuiApplication:
         self._render_profiler.enable()
 
       while not (self._window_close_requested or rl.window_should_close()):
+        now = time.monotonic()
+        if now - self._last_recording_check >= 1.0:
+          try:
+            self._update_recording()
+          except Exception as e:
+            cloudlog.warning(f"record update error: {e}")
+            self._last_recording_check = now
+
         if PC:
           # Thread is not used on PC, need to manually add mouse events
           self._mouse._handle_mouse_event()
@@ -469,6 +649,49 @@ class GuiApplication:
           self._draw_grid()
 
         rl.end_drawing()
+
+        # kisapilot
+        if self._kisa_recorder is not None:
+        # now_t = time.monotonic()
+        # if (now_t - self._last_record_capture_time) >= self._kisa_record_sample_interval:
+          try:
+            rl.begin_texture_mode(self._kisa_record_texture)
+            src_rect = rl.Rectangle(0, 0, float(self._width), -float(self._height))
+            dst_rect = rl.Rectangle(0, 0, float(self._target_width), float(self._target_height))
+            rl.draw_texture_pro(self._render_texture.texture, src_rect, dst_rect, rl.Vector2(0, 0), 0.0, rl.WHITE)
+            rl.end_texture_mode()
+            image = rl.load_image_from_texture(self._kisa_record_texture.texture)
+            data_size = image.width * image.height * 4
+            data = bytes(rl.ffi.buffer(image.data, data_size))
+            rl.unload_image(image)
+
+            self._rollover_recording_if_needed()
+
+            if self._writer_thread is not None and self._writer_thread.is_alive():
+              try:
+                self._kisa_record_queue.put_nowait(data)
+              except Full:
+                try:
+                  _ = self._kisa_record_queue.get_nowait()
+                  self._kisa_record_queue.task_done()
+                  self._kisa_record_queue.put_nowait(data)
+                except Exception:
+                  self._kisa_record_fail_count += 1
+                  cloudlog.warning("record queue full — dropped frame")
+              else:
+                self._kisa_record_fail_count = 0
+            else:
+              self._write_frame(data)
+
+          except Exception as e:
+            cloudlog.warning(f"record capture error: {e}")
+            self._kisa_record_fail_count += 1
+            if self._kisa_record_fail_count >= self._kisa_record_fail_threshold:
+              cloudlog.error("Too many record capture failures, stopping recording.")
+              self._stop_recording()
+            # finally:
+              # self._last_record_capture_time = now_t
+
         self._monitor_fps()
         self._frame += 1
 
@@ -594,6 +817,7 @@ class GuiApplication:
     # Strict mode: terminate UI if FPS drops too much
     if STRICT_MODE and fps < self._target_fps * FPS_CRITICAL_THRESHOLD:
       cloudlog.error(f"FPS dropped critically below {fps}. Shutting down UI.")
+      self._stop_recording()
       os._exit(1)
 
   def _draw_touch_points(self):

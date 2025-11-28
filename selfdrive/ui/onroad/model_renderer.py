@@ -11,6 +11,9 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 from openpilot.system.ui.widgets import Widget
 
+from collections import deque
+
+
 CLIP_MARGIN = 500
 MIN_DRAW_DISTANCE = 10.0
 MAX_DRAW_DISTANCE = 100.0
@@ -53,6 +56,223 @@ class LeadVehicle:
   fill_alpha: int = 0
 
 
+class DrawPlot:
+  PLOT_MAX = 400
+
+  def __init__(self):
+    self.plotSize = 0
+    self.plotIndex = 0
+    self.plotQueue = [[0.0]*self.PLOT_MAX for _ in range(3)]
+    self.plotMin = 0.0
+    self.plotMax = 0.0
+    self.plotX = 350.0
+    self.plotY = 40.0
+    self.plotHeight = 300.0
+    self.plotDx = 2.0
+    self.plotRatio = 1.0
+    self.show_plot_mode_prev = -1
+    self.minDeque = [deque() for _ in range(3)]
+    self.maxDeque = [deque() for _ in range(3)]
+
+  def _draw_plotting(self, renderer, index, start, x, y_list, size, color, stroke=2):
+    span = (self.plotMax - self.plotMin)
+    self.plotRatio = self.plotHeight if span < 1.0 else (self.plotHeight / span)
+    dx = self.plotDx
+
+    if size <= 0:
+      return
+
+    prev_x = None
+    prev_y = None
+    for i in range(size):
+      data = y_list[(start - i) % self.PLOT_MAX]
+      plot_y = self.plotY + self.plotHeight - (data - self.plotMin) * self.plotRatio
+      x_pos = x + (size - i) * dx
+
+      if prev_x is not None:
+        # pyray wrapper uses rl.draw_line
+        try:
+          rl.draw_line(int(prev_x), int(prev_y), int(x_pos), int(plot_y), color)
+          if stroke > 1:
+            rl.draw_line(int(prev_x), int(prev_y)+1, int(x_pos), int(plot_y)+1, color)
+        except Exception:
+          # 일부 환경에서 함수명/시그니처 다를 수 있으니 예외 무시
+          pass
+      else:
+        # 첫 점 값 텍스트 출력 (위치 조정)
+        txt = "{:.2f}".format(data)
+        y_offset = 40 if index > 0 else 0
+        try:
+          rl.draw_text(txt, int(x_pos + 50), int(plot_y + y_offset), 14, rl.Color(255,255,255,255))
+        except Exception:
+          pass
+
+      prev_x = x_pos
+      prev_y = plot_y
+
+  def make_plot_data(self, renderer):
+    sm = ui_state.sm
+    try:
+      car_state = sm["carState"]
+      lp = sm['longitudinalPlan']
+      car_control = sm['carControl']
+      controls_state = sm['controlsState']
+      torque_state = controls_state.lateralControlState.torqueState
+      a_ego = car_state.aEgo
+      v_ego = car_state.vEgo
+      accel = lp.accels[0]
+      speeds_0 = lp.speeds[0]
+      accel_out = car_control.actuators.accel
+      model = sm['modelV2'].modelV2
+      position = model.position
+      velocity = model.velocity
+      live_params = sm['liveParameters'].liveParameters
+    except Exception:
+      return [0.0, 0.0, 0.0], "no data"
+
+    m = ui_state.show_plot_mode
+    data = [0.0, 0.0, 0.0]
+    title = "no data"
+
+    if m in (0, 1):
+      data[0] = a_ego
+      data[1] = accel
+      data[2] = accel_out
+      title = "1.Accel (Y:a_ego, G:a_target, O:a_out)"
+    elif m == 2:
+      data[0] = speeds_0
+      data[1] = v_ego
+      data[2] = a_ego
+      title = "2.Speed/Accel(Y:speed_0, G:v_ego, O:a_ego)"
+    elif m == 3:
+      try:
+        data[0] = position.x[32]
+      except Exception:
+        data[0] = 0.0
+      try:
+        data[1] = velocity.x[32]
+        data[2] = velocity.x[0]
+      except Exception:
+        data[1] = data[2] = 0.0
+      title = "3.Model(Y:pos_32, G:vel_32, O:vel_0)"
+    elif m == 4:
+      data[0] = accel
+      if sm.valid['radarState']:
+        lead = sm['radarState'].radarState.leadOne
+        data[1] = lead.aLeadK if lead is not None else 0.0
+        data[2] = lead.vRel if lead is not None else 0.0
+      title = "4.Lead(Y:accel, G:a_lead, O:v_rel)"
+    elif m == 5:
+      data[0] = a_ego
+      if sm.valid['radarState']:
+        lead = sm['radarState'].radarState.leadOne
+        data[1] = lead.aLead if lead else 0.0
+        data[2] = lead.jLead if lead else 0.0
+      title = "5.Lead(Y:a_ego, G:a_lead, O:j_lead)"
+    elif m == 6:
+      data[0] = torque_state.actualLateralAccel * 10.0
+      data[1] = torque_state.desiredLateralAccel * 10.0
+      data[2] = torque_state.output * 10.0
+      title = "6.Steer(Y:actual, G:desire, O:output)"
+    elif m == 7:
+      data[0] = car_state.steeringAngleDeg
+      data[1] = car_control.actuators.steeringAngleDeg
+      data[2] = live_params.angleOffsetDeg * 10.0
+      title = "7.SteerA (Y:Actual, G:Target, O:Offset*10)"
+    elif m == 8:
+      try:
+        curv = car_control.actuators.curvature * 10000.0
+      except Exception:
+        curv = 0.0
+      data = [curv, curv, curv]
+      title = "8.SteerA (Y:Actual, G:Target, O:Offset*10)"
+    else:
+      data = [0.0, 0.0, 0.0]
+      title = "no data"
+
+    if ui_state.show_plot_mode != self.show_plot_mode_prev:
+      self.plotSize = 0
+      self.plotIndex = 0
+      self.plotMin = 0.0
+      self.plotMax = 0.0
+      for i in range(3):
+        self.minDeque[i].clear()
+        self.maxDeque[i].clear()
+      self.show_plot_mode_prev = ui_state.show_plot_mode
+
+    return data, title
+
+  def update_plot_queue(self, plot_data):
+    self.plotIndex = (self.plotIndex + 1) % self.PLOT_MAX
+    for i in range(3):
+      if self.plotSize == self.PLOT_MAX:
+        if self.minDeque[i] and self.minDeque[i][0] == self.plotQueue[i][self.plotIndex]:
+          self.minDeque[i].popleft()
+        if self.maxDeque[i] and self.maxDeque[i][0] == self.plotQueue[i][self.plotIndex]:
+          self.maxDeque[i].popleft()
+
+      self.plotQueue[i][self.plotIndex] = plot_data[i]
+
+      while self.minDeque[i] and self.minDeque[i][-1] > plot_data[i]:
+        self.minDeque[i].pop()
+      self.minDeque[i].append(plot_data[i])
+
+      while self.maxDeque[i] and self.maxDeque[i][-1] < plot_data[i]:
+        self.maxDeque[i].pop()
+      self.maxDeque[i].append(plot_data[i])
+
+    if self.plotSize < self.PLOT_MAX:
+      self.plotSize += 1
+
+    self.plotMin = float('inf')
+    self.plotMax = -float('inf')
+    for i in range(3):
+      if self.minDeque[i]:
+        self.plotMin = min(self.plotMin, self.minDeque[i][0])
+      if self.maxDeque[i]:
+        self.plotMax = max(self.plotMax, self.maxDeque[i][0])
+
+    # 최소/최대 범위 고정
+    if self.plotMin > -2.0:
+      self.plotMin = -2.0
+    if self.plotMax < 2.0:
+      self.plotMax = 2.0
+
+  def draw(self, renderer):
+    # renderer: ModelRenderer 인스턴스 (self)
+    if ui_state.show_plot_mode == 0:
+      return
+
+    sm = ui_state.sm
+    if not (sm.alive('carState') and sm.alive('longitudinalPlan')):
+      return
+
+    plot_data, title = self.make_plot_data(renderer)
+    self.update_plot_queue(plot_data)
+
+    if getattr(renderer, "_rect", None) is None:
+      return
+    if renderer._rect.width < 1200:
+      return
+
+    # 색상 (파일 상단 스타일 유지)
+    COLOR_YELLOW = rl.Color(240, 200, 0, 255)
+    COLOR_GREEN  = rl.Color(0, 200, 100, 255)
+    COLOR_ORANGE = rl.Color(255, 128, 0, 255)
+    COLOR_WHITE  = rl.Color(255,255,255,255)
+    colors = [COLOR_YELLOW, COLOR_GREEN, COLOR_ORANGE]
+
+    # 각 채널 그리기
+    for i in range(3):
+      self._draw_plotting(renderer, i, self.plotIndex, self.plotX, self.plotQueue[i], self.plotSize, colors[i], stroke=2)
+
+    # 제목 출력
+    try:
+      rl.draw_text(title, int(self.plotX + 400), int(self.plotY - 20), 18, COLOR_WHITE)
+    except Exception:
+      pass
+
+
 class ModelRenderer(Widget):
   def __init__(self):
     super().__init__()
@@ -87,6 +307,8 @@ class ModelRenderer(Widget):
     if car_params := Params().get("CarParams"):
       cp = messaging.log_from_bytes(car_params, car.CarParams)
       self._longitudinal_control = cp.openpilotLongitudinalControl
+
+    self._draw_plot = DrawPlot()
 
   def set_transform(self, transform: np.ndarray):
     self._car_space_transform = transform.astype(np.float32)
@@ -138,8 +360,14 @@ class ModelRenderer(Widget):
     self._draw_lane_lines()
     self._draw_path(sm)
 
+    try:
+      self._draw_plot.draw(self)
+    except Exception:
+      pass
+
     if render_lead_indicator and radar_state:
       self._draw_lead_indicator()
+      self._draw_radar_info(radar_state)
 
   def _update_raw_points(self, model):
     """Update raw 3D points from model data"""
@@ -364,6 +592,139 @@ class ModelRenderer(Widget):
       else:
         rl.draw_triangle_fan(lead.glow, len(lead.glow), rl.Color(100, 255, 100, 255))
         rl.draw_triangle_fan(lead.chevron, len(lead.chevron), rl.Color(50, 200, 50, lead.fill_alpha))
+
+  def _draw_radar_info(self, radar_state):
+    """Draw radar details.
+
+    - Uses Params ShowRadarInfo (0/1/2/3) to control verbosity
+    - Uses RadarLatFactor to compute prediction time (percent /100)
+    - Renders boxes with relative speed, predicted point line and circle, and optional distance/lateral text
+    """
+    s = ui_state
+
+    try:
+      raw_lat = s.radar_lat_factor
+      radar_lat_factor = float(raw_lat) / 100.0 if raw_lat is not None else 0.2
+    except Exception:
+      radar_lat_factor = 0.2
+
+    if s.show_radar_info <= 0:
+      return
+
+    # We'll render for leadOne and leadTwo if present
+    leads = []
+    if radar_state is None:
+      return
+
+    if getattr(radar_state, 'leadOne', None) is not None:
+      leads.append(radar_state.leadOne)
+    if getattr(radar_state, 'leadTwo', None) is not None:
+      leads.append(radar_state.leadTwo)
+
+    # get lane z array fallback
+    lane_z = None
+    try:
+      if len(self._lane_lines) > 2 and self._lane_lines[2].raw_points.size:
+        lane_z = self._lane_lines[2].raw_points[:, 2]
+    except Exception:
+      lane_z = None
+
+    for l in leads:
+      try:
+        if not getattr(l, 'status', False):
+          continue
+
+        dRel = float(getattr(l, 'dRel', 0.0))
+        yRel = float(getattr(l, 'yRel', 0.0))
+        v = float(getattr(l, 'vRel', 0.0))  # in m/s (approx)
+        v_lat = float(getattr(l, 'vLat', 0.0)) if hasattr(l, 'vLat') else 0.0
+
+        # only render if in front and beyond small threshold
+        if dRel <= 2.5:
+          # optionally render star for very close when verbosity high
+          if s.show_radar_info >= 3:
+            # try to project the point to screen for location
+            pt = self._map_to_screen(dRel, -yRel, 0.0 + self._path_offset_z)
+            if pt:
+              rl.draw_text("*", int(pt[0]), int(pt[1]), 40, rl.BLACK)
+          continue
+
+        # z from lane if available
+        z = 0.0
+        if lane_z is not None:
+          # find index for dRel
+          idx = self._get_path_length_idx(self._lane_lines[2].raw_points[:, 0], dRel)
+          if idx < len(lane_z):
+            z = lane_z[idx] - 0.61
+
+        side = self._map_to_screen(dRel, -yRel, z + self._path_offset_z)
+        if not side:
+          continue
+        x, y = side
+
+        # speed magnitude
+        v_abs = np.sqrt(v * v + v_lat * v_lat)
+        v_sum = v_abs if v >= 0.0 else -v_abs
+
+        # predicted future
+        t = radar_lat_factor
+        if v_abs > 3.0:
+          a_dRel = dRel + v * t
+          if a_dRel < 2.0:
+            a_dRel = 2.0
+          a_yRel = yRel + v_lat * t
+          a_side = self._map_to_screen(a_dRel, -a_yRel, z + self._path_offset_z)
+          if a_side:
+            ax, ay = a_side
+            # draw line from current to predicted
+            rl.draw_line(int(x), int(y), int(ax), int(ay), rl.Color(0, 255, 0, 255) if v_sum > 0 else rl.Color(255, 0, 0, 255))
+            # draw predicted circle
+            rl.draw_circle(int(ax), int(ay), 10, rl.Color(0, 255, 0, 255) if v_sum > 0 else rl.Color(255, 0, 0, 255))
+
+        # draw speed box
+        # convert to display units
+        MS_TO_KPH = 3.6
+        MS_TO_MPH = 2.2369362920544
+        if s.is_metric:
+          disp_speed = v_sum * MS_TO_KPH
+        else:
+          disp_speed = v_sum * MS_TO_MPH
+        speed_str = f"{int(round(disp_speed))}"
+        # compute box width
+        wStr = 35 * max(1, len(speed_str))
+        box_x = int(x - wStr / 2)
+        box_y = int(y - 35)
+        # choose box color
+        model_prob = float(getattr(l, 'modelProb', 0.0))
+        radar_flag = bool(getattr(l, 'radar', False)) if hasattr(l, 'radar') else True
+        if not radar_flag:
+          box_color = rl.Color(0, 122, 255, 200)  # blue-ish
+        elif abs(model_prob - 0.01) < 1e-6:
+          box_color = rl.Color(0, 255, 0, 200)
+        else:
+          box_color = rl.Color(255, 165, 0, 200) if v_sum > 0 else rl.Color(255, 0, 0, 200)
+
+        rl.draw_rectangle(box_x, box_y, wStr, 42, box_color)
+        # draw text (fallback to white)
+        try:
+          rl.draw_text(speed_str, int(x - (len(speed_str) * 6)), int(y - 10), 40, rl.Color(255, 255, 255, 255))
+        except Exception:
+          # some pyray wrappers expect different args
+          pass
+
+        # additional info when verbosity >=2
+        if s.show_radar_info >= 2:
+          dist_text = f"{dRel:.1f}" if s.is_metric else f"{dRel * 0.621371:.1f}"
+          lat_text = f"{yRel:.1f}"
+          try:
+            rl.draw_text(lat_text, int(x - 12), int(y - 40), 30, rl.Color(255, 255, 255, 255))
+            rl.draw_text(dist_text, int(x - 12), int(y + 30), 30, rl.Color(255, 255, 255, 255))
+          except Exception:
+            pass
+
+      except Exception:
+        # keep drawing others even if one fails
+        continue
 
   @staticmethod
   def _get_path_length_idx(pos_x_array: np.ndarray, path_distance: float) -> int:

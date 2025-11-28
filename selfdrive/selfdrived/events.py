@@ -253,7 +253,16 @@ def below_steer_speed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.S
     f"Steer Assist Unavailable Below {get_display_speed(CP.minSteerSpeed, metric)}",
     "",
     AlertStatus.userPrompt, AlertSize.small,
-    Priority.LOW, VisualAlert.steerRequired, AudibleAlert.none, 0.4)
+    Priority.LOW, VisualAlert.none, AudibleAlert.none, 0.4)
+
+
+def steer_saturated_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
+  steer_text2 = "Steer Left" if sm['carControl'].actuators.torque > 0 else "Steer Right"
+  return Alert(
+    "Take Control",
+    steer_text2,
+    AlertStatus.userPrompt, AlertSize.mid,
+    Priority.LOW, VisualAlert.steerRequired, AudibleAlert.promptRepeat, 2.)
 
 
 def calibration_incomplete_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
@@ -611,7 +620,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.WARNING: Alert(
       "Changing Lanes",
       "",
-      AlertStatus.normal, AlertSize.none,
+      AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
   },
 
@@ -1041,6 +1050,20 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
   },
+  EventName.laneChangeMerging: {
+    ET.WARNING: Alert(
+      "Lane Change Merging",
+      "",
+      AlertStatus.clear, AlertSize.small,
+      Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
+  },
+  EventName.laneChangeFinish: {
+    ET.WARNING: Alert(
+      "Lane Change Finished",
+      "",
+      AlertStatus.clear, AlertSize.small,
+      Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
+  },
   EventName.trafficStopping: {
     ET.WARNING: EngagementAlert(AudibleAlert.stopping),
     #ET.WARNING: Alert(
@@ -1126,6 +1149,13 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
   EventName.audio0: {
      ET.WARNING: EngagementAlert(AudibleAlert.longDisengaged),
+  },
+  EventName.chimeAtResume: {
+    ET.WARNING: Alert(
+      "Start Moving",
+      "",
+      AlertStatus.normal, AlertSize.small,
+      Priority.LOW, VisualAlert.none, AudibleAlert.dingdong, 3.),
   },
 }
 

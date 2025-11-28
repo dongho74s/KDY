@@ -169,6 +169,8 @@ class CarSpecificEvents:
         self.low_speed_alert = False
       if self.low_speed_alert:
         events.add(EventName.belowSteerSpeed)
+      if CC.e2eStandstill:
+        events.add(EventName.chimeAtResume)
 
     else:
       events = self.create_common_events(CS, CS_prev)

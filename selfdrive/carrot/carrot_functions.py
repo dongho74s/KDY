@@ -204,7 +204,7 @@ class CarrotPlanner:
   def _update_model_desire(self, sm):
     meta = sm['modelV2'].meta
     carState = sm['carState']
-    if meta.laneChangeState == LaneChangeState.laneChangeStarting: # laneChangig
+    if meta.laneChangeState in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeMerging): # laneChangig
       self.desireState = meta.desireState[3] if carState.leftBlinker else meta.desireState[4]
       self.desireStateCount += 1
     else:

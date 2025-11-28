@@ -250,4 +250,6 @@ class LongitudinalPlanner:
     longitudinalPlan.events = carrot.events.to_msg()
     longitudinalPlan.myDrivingMode = carrot.myDrivingMode.value
 
+    longitudinalPlan.e2eX = self.mpc.e2e_x.tolist()
+
     pm.send('longitudinalPlan', plan_send)

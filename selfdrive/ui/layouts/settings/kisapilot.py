@@ -36,7 +36,7 @@ NUMERICS = [
   {"n": "1", "title": "Debug UI", "param": "ShowDebugUI", "min_value": 0, "max_value": 2, "step": 1, "decimals": 0, "value_type": "INT", "special_texts": {"0": "None", "1": "Dev State", "2": "Dev+Safety"}, "description": "Debug UI"},
   {"n":"2","title":"HYUNDAI: CAMERA SCC","param":"HyundaiCameraSCC","min_value":0,"max_value":3,"step":1,"decimals":0,"value_type":"INT","special_texts":{"0": "None","1":"CAMERA SCC","2":"Cruise State","3":"Stock Long"},"description":"1:Connect the SCC's CAN line to CAM, 2:Sync Cruise state, 3:StockLong"},
   {"n":"3","title":"CANFD: HDA2 mode","param":"CanfdHDA2","min_value":0,"max_value":2,"step":1,"decimals":0,"value_type":"INT","special_texts":{"0":"None","1":"HDA2","2":"HDA2+BSM"},"description":"1:HDA2,2:HDA2+BSM"},
-  {"n":"4","title":"Enable Radar Track","param":"EnableRadarTracks","min_value":-1,"max_value":3,"step":1,"decimals":0,"value_type":"INT","special_texts":{"-1":"None","0":"None","1":"RadarTrack","2":"StockRadar"},"description":"1:Enable RadarTrack, -1,2:Disable use HKG SCC radar at all times"},
+  {"n":"4","title":"Enable Radar Track","param":"EnableRadarTracks","min_value":-1,"max_value":3,"step":1,"decimals":0,"value_type":"INT","special_texts":{"-1":"None","0":"SCC Radar","1":"RadarTrack","2":"RadarTrack(SCC On)","3":"RadarTrack(Cutin)"},"description":"-1: SCC Radar(SCC Always On), 0: SCC Radar, 1: Radar Track Enabled, 2: Radar Track Enabled(SCC Always On), 3:Radar Track Eanbled(Cutin detect and etc)"},
   {"n":"5","title":"Auto Cruise control","param":"AutoCruiseControl","min_value":0,"max_value":3,"step":1,"decimals":0,"value_type":"INT","description":"Softhold, Auto Cruise ON/OFF control"},
   {"n":"6","title":"CRUISE: Auto ON distance(0cm)","param":"CruiseOnDist","min_value":0,"max_value":2500,"step":50,"decimals":0,"value_type":"INT","description":"When GAS/Brake is OFF, Cruise ON when the lead car gets closer."},
   {"n":"7","title":"Auto Engage control on start","param":"AutoEngage","min_value":0,"max_value":2,"step":1,"decimals":0,"value_type":"INT","special_texts":{"1":"SteerEnable","2":"Steer/Cruise Engage"},"description":"1:SteerEnable, 2:Steer/Cruise Engage"},
@@ -126,7 +126,9 @@ NUMERICS = [
   {"n":"87","title":"ATC:Turn CtrlDistTime (6)","param":"AutoTurnControlTurnEnd","min_value":0,"max_value":30,"step":1,"decimals":0,"value_type":"INT","description":"dist=speed*time"},
   {"n":"88","title":"ATC Auto Map Change(0)","param":"AutoTurnMapChange","min_value":0,"max_value":1,"step":1,"decimals":0,"value_type":"INT"},
   {"n":"89","title":"RadarTrack Cutin Factor(0)","param":"RadarLatFactor","min_value":0,"max_value":1000,"step":50,"decimals":0,"value_type":"INT","description":"Higher values increase sensitivity to cutting-in or exiting vehicles"},
-  {"n":"90","title":"LONG:AChangeCost2(30)","param":"AChangeCost2","min_value":10,"max_value":50,"step":1,"decimals":0,"value_type":"INT","description":"Higher values more smooth stopping"}
+  {"n":"90","title":"LONG:AChangeCost2(30)","param":"AChangeCost2","min_value":10,"max_value":200,"step":1,"decimals":0,"value_type":"INT","description":"Higher values more smooth stopping"},
+  {"n":"91","title":"Show Radar Info","param":"ShowRadarInfo","min_value":0,"max_value":3,"step":1,"decimals":0,"value_type":"INT","special_texts":{"0":"None","1":"Show","2":"+Relative Pos","3":"+Stopped Obstacle"},"description":"0:None, 1:display, 2:+relative pos, 3:stopped obstacle"},
+  {"n":"92","title":"Show Plot Mode","param":"ShowPlotMode","min_value":0,"max_value":5,"step":1,"decimals":0,"value_type":"INT","special_texts":{"0":"None","1":"Accel","2":"Accel+Vel","3":"Model","4":"Lead","5":"Lead2"},"description":"1:Accel,2:Accel+vel,3:Model,4:Lead,5:Lead2"}
 ]
 
 
@@ -291,6 +293,8 @@ class KisaPilotLayout(Widget):
         #self._numeric[2],  # AutoEnableSpeed : int
         #self._numeric[10], # UseLegacyLaneModel : int
         self._numeric[1],  # ShowDebugUI : int
+        self._numeric[91],
+        self._numeric[92],
       ],
     ]
     self._current_menu = 0
