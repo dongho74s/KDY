@@ -254,8 +254,8 @@ class GuiApplication:
     self._kisa_record_fail_count: int = 0
     self._kisa_record_fail_threshold: int = 10
     self._kisa_record_texture: rl.RenderTexture | None = None
-    self._target_width = 1080
-    self._target_height = 540
+    self._target_width = 960
+    self._target_height = 480
 
   def _start_recording(self):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
