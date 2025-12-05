@@ -245,17 +245,17 @@ class GuiApplication:
     self.RecordingRunning: bool = False
     self._last_recording_check = 0.0
     self._frame_counter = 0
-    self._desired_record_fps = 15 # recording fps
+    self._desired_record_fps = 20 # recording fps
     #self._kisa_record_sample_interval = 1.0 / float(self._desired_record_fps)
     #self._last_record_capture_time: float = 0.0
-    queue_max_frames = self._desired_record_fps * 3
+    queue_max_frames = self._desired_record_fps * 5
     self._kisa_record_queue: Queue[bytes] = Queue(maxsize=queue_max_frames)
     self._writer_thread: threading.Thread | None = None
     self._kisa_record_fail_count: int = 0
     self._kisa_record_fail_threshold: int = 10
     self._kisa_record_texture: rl.RenderTexture | None = None
-    self._target_width = 960
-    self._target_height = 480
+    self._target_width = 720
+    self._target_height = 360
 
   def _start_recording(self):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
