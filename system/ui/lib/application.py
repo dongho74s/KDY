@@ -90,6 +90,7 @@ FONT_SCALE = 1.242 if BIG_UI else 1.16
 ASSETS_DIR = files("openpilot.selfdrive").joinpath("assets")
 FONT_DIR = ASSETS_DIR.joinpath("fonts")
 
+UI_REC = True
 
 class FontWeight(StrEnum):
   LIGHT = "Inter-Light.fnt"
@@ -233,56 +234,82 @@ class GuiApplication:
     self._render_profile_start_time = None
 
     # Kisa Rec
+    self._params = Params()
     self._scaled_width += self._scaled_width % 2
     self._scaled_height += self._scaled_height % 2
     self._kisa_recorder: subprocess.Popen | None = None
     self._kisa_record_start_time: datetime | None = None
     self._kisa_record_file: Path | None = None
-    self._kisa_record_interval = timedelta(minutes=10) # 10 minutes per video
+    self._kisa_record_interval = timedelta(minutes=self._params.get("RecordingTimePerVideo", return_default=True))
+    self._kisa_max_record_files = self._params.get("RecordingMaxFiles", return_default=True)
     self._video_dir = Path("/data/media/0/videos")
     self._video_dir.mkdir(parents=True, exist_ok=True)
-    self._params = Params()
     self.RecordingRunning: bool = False
     self._last_recording_check = 0.0
-    self._frame_counter = 0
-    self._desired_record_fps = 20 # recording fps
-    #self._kisa_record_sample_interval = 1.0 / float(self._desired_record_fps)
-    #self._last_record_capture_time: float = 0.0
-    queue_max_frames = self._desired_record_fps * 5
+    self._input_fps = 10 # input fps
+    queue_max_frames = self._input_fps * 5
     self._kisa_record_queue: Queue[bytes] = Queue(maxsize=queue_max_frames)
     self._writer_thread: threading.Thread | None = None
     self._kisa_record_fail_count: int = 0
     self._kisa_record_fail_threshold: int = 10
     self._kisa_record_texture: rl.RenderTexture | None = None
-    self._target_width = 720
-    self._target_height = 360
+    self._target_width = int(1024)
+    self._target_height = int(self._target_width / 2)
 
   def _start_recording(self):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     self._kisa_record_file = self._video_dir / f"{timestamp}.mp4"
     self._kisa_record_start_time = datetime.now()
 
+    try:
+      if self._kisa_max_record_files > 0:
+        self._enforce_record_file_limit()
+    except Exception as e:
+      cloudlog.warning(f"_start_recording: enforce file limit failed: {e}")
+
     ffmpeg_cmd = [
-      'ffmpeg',
-      '-v', 'warning',          # Reduce ffmpeg log spam
-      #'-stats',                 # Show encoding progress
-      '-f', 'rawvideo',         # Input format
-      '-pix_fmt', 'rgba',       # Input pixel format
-      '-s', f'{self._target_width}x{self._target_height}',  # Input resolution
-      '-r', str(self._target_fps),           # Input frame rate
-      '-i', 'pipe:0',           # Input from stdin
-      '-vf', 'vflip, format=yuv420p',  # Flip vertically and convert rgba to yuv420p
-      '-c:v', 'libx264',        # Video codec
-      '-preset', 'ultrafast',   # Encoding speed
-      '-crf', '26',             # video quality(0~51), 0=best, 51=worst, default: 23
-      '-vsync', '2',            # Vsync
-      '-y',                     # Overwrite existing file
-      '-f', 'mp4',              # Output format
-      str(self._kisa_record_file)
+        'ffmpeg', '-v', 'warning',
+        '-f', 'rawvideo', '-pix_fmt', 'rgba',
+        '-s', f'{self._target_width}x{self._target_height}',
+        '-framerate', str(self._input_fps),
+        '-thread_queue_size', '1024',
+        '-r', str(self._input_fps),
+        '-i', 'pipe:0',
+        '-vf', 'vflip,format=yuv420p',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-x264-params', 'bframes=0:ref=1:subme=0:me=dia',
+        '-crf', '25',
+        '-threads', '0',
+        '-vsync', '2',
+        '-y',
+        '-f', 'mp4',
+        str(self._kisa_record_file)
     ]
+    # ffmpeg_cmd = [
+    #     "ffmpeg", "-v", "warning",
+    #     "-f", "rawvideo",
+    #     "-pix_fmt", "rgba",
+    #     "-s", f"{self._target_width}x{self._target_height}",
+    #     "-framerate", str(self._input_fps),
+    #     "-thread_queue_size", "512",
+    #     "-r", str(self._input_fps),
+    #     "-i", "pipe:0",
+    #     "-vf", "format=nv12",
+    #     "-c:v", "hevc_v4l2m2m",
+    #     "-b:v", "5000k",
+    #     "-maxrate", "5000k",
+    #     "-bufsize", "10000k",
+    #     "-g", str(self._input_fps*2),
+    #     "-bf", "0",
+    #     "-vsync", "2",
+    #     "-y",
+    #     "-f", "mp4",
+    #     str(self._kisa_record_file)
+    # ]
+
     print(f"Start recording → {self._kisa_record_file}")
     self._kisa_recorder = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
-    #self._last_record_capture_time = time.monotonic()
     self._kisa_record_fail_count = 0
 
     with self._kisa_record_queue.mutex:
@@ -389,6 +416,36 @@ class GuiApplication:
       except Exception:
         self._stop_recording()
 
+  def _enforce_record_file_limit(self):
+    try:
+      if not self._video_dir.exists():
+        return
+
+      files = [p for p in self._video_dir.iterdir() if p.is_file() and p.suffix.lower() == ".mp4"]
+      files.sort(key=lambda p: p.stat().st_mtime)
+
+      cur = self._kisa_record_file
+      keep = max(0, int(self._kisa_max_record_files))
+
+      to_delete = len(files) - keep
+      if to_delete <= 0:
+        return
+
+      deleted = 0
+      for p in files:
+        if cur is not None and p.resolve() == cur.resolve():
+          continue
+        try:
+          p.unlink()
+          cloudlog.info(f"Removed old recording file: {p}")
+          deleted += 1
+        except Exception as e:
+          cloudlog.warning(f"Failed to remove old recording file {p}: {e}")
+        if deleted >= to_delete:
+          break
+    except Exception as e:
+      cloudlog.warning(f"_enforce_record_file_limit error: {e}")
+
   @property
   def frame(self):
     return self._frame
@@ -423,13 +480,14 @@ class GuiApplication:
       rl.set_config_flags(flags)
 
       rl.init_window(self._scaled_width, self._scaled_height, title)
-      needs_render_texture = self._scale != 1.0 or BURN_IN_MODE or True
+      needs_render_texture = self._scale != 1.0 or BURN_IN_MODE or UI_REC
       if self._scale != 1.0:
         rl.set_mouse_scale(1 / self._scale, 1 / self._scale)
       if needs_render_texture:
         self._render_texture = rl.load_render_texture(self._width, self._height)
         rl.set_texture_filter(self._render_texture.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
         self._kisa_record_texture = rl.load_render_texture(self._target_width, self._target_height)
+        rl.set_texture_filter(self._kisa_record_texture.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
 
       rl.set_target_fps(fps)
 
@@ -652,45 +710,44 @@ class GuiApplication:
 
         # kisapilot
         if self._kisa_recorder is not None:
-        # now_t = time.monotonic()
-        # if (now_t - self._last_record_capture_time) >= self._kisa_record_sample_interval:
-          try:
-            rl.begin_texture_mode(self._kisa_record_texture)
-            src_rect = rl.Rectangle(0, 0, float(self._width), -float(self._height))
-            dst_rect = rl.Rectangle(0, 0, float(self._target_width), float(self._target_height))
-            rl.draw_texture_pro(self._render_texture.texture, src_rect, dst_rect, rl.Vector2(0, 0), 0.0, rl.WHITE)
-            rl.end_texture_mode()
-            image = rl.load_image_from_texture(self._kisa_record_texture.texture)
-            data_size = image.width * image.height * 4
-            data = bytes(rl.ffi.buffer(image.data, data_size))
-            rl.unload_image(image)
+          if self._frame % (20 // self._input_fps) == 0:
+            try:
+              rl.begin_texture_mode(self._kisa_record_texture)
+              src_rect = rl.Rectangle(0, 0, float(self._width), -float(self._height))
+              dst_rect = rl.Rectangle(0, 0, float(self._target_width), float(self._target_height))
+              rl.draw_texture_pro(self._render_texture.texture, src_rect, dst_rect, rl.Vector2(0, 0), 0.0, rl.WHITE)
+              rl.end_texture_mode()
+              image = rl.load_image_from_texture(self._kisa_record_texture.texture)
 
-            self._rollover_recording_if_needed()
+              data_size = image.width * image.height * 4
+              data = bytes(rl.ffi.buffer(image.data, data_size))
+              rl.unload_image(image)
 
-            if self._writer_thread is not None and self._writer_thread.is_alive():
-              try:
-                self._kisa_record_queue.put_nowait(data)
-              except Full:
+              self._rollover_recording_if_needed()
+
+              if self._writer_thread is not None and self._writer_thread.is_alive():
                 try:
-                  _ = self._kisa_record_queue.get_nowait()
-                  self._kisa_record_queue.task_done()
                   self._kisa_record_queue.put_nowait(data)
-                except Exception:
-                  self._kisa_record_fail_count += 1
-                  cloudlog.warning("record queue full — dropped frame")
+                except Full:
+                  try:
+                    _ = self._kisa_record_queue.get_nowait()
+                    self._kisa_record_queue.task_done()
+                    self._kisa_record_queue.put_nowait(data)
+                  except Exception:
+                    self._kisa_record_fail_count += 1
+                    cloudlog.warning("record queue full — dropped frame")
+                else:
+                  self._kisa_record_fail_count = 0
               else:
-                self._kisa_record_fail_count = 0
-            else:
-              self._write_frame(data)
+                self._write_frame(data)
 
-          except Exception as e:
-            cloudlog.warning(f"record capture error: {e}")
-            self._kisa_record_fail_count += 1
-            if self._kisa_record_fail_count >= self._kisa_record_fail_threshold:
-              cloudlog.error("Too many record capture failures, stopping recording.")
-              self._stop_recording()
-            # finally:
-              # self._last_record_capture_time = now_t
+            except Exception as e:
+              cloudlog.warning(f"record capture error: {e}")
+              self._kisa_record_fail_count += 1
+              if self._kisa_record_fail_count >= self._kisa_record_fail_threshold:
+                cloudlog.error("Too many record capture failures, stopping recording.")
+                self._stop_recording()
+
 
         self._monitor_fps()
         self._frame += 1

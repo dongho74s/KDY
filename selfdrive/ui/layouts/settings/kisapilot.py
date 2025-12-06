@@ -29,6 +29,10 @@ BUTTONS = [
     ConfirmDialog("Delete all saved driving logs. Do you want to proceed?", "OK"),
     callback=lambda result: os.system("rm -rf /data/media/0/realdata/*") if result == DialogResult.CONFIRM else None),
     "description": "This removes all driving logs under /data/media/0/realdata/."},
+  {"n": "1", "title": "Delete All Recorded Videos", "text": "RUN", "callback": lambda: gui_app.set_modal_overlay(
+    ConfirmDialog("Delete all saved videos. Do you want to proceed?", "OK"),
+    callback=lambda result: os.system("rm -rf /data/media/0/videos/*") if result == DialogResult.CONFIRM else None),
+    "description": "This removes all recorded videos under /data/media/0/videos/."},
 ]
 
 NUMERICS = [
@@ -128,7 +132,10 @@ NUMERICS = [
   {"n":"89","title":"RadarTrack Cutin Factor(0)","param":"RadarLatFactor","min_value":0,"max_value":1000,"step":50,"decimals":0,"value_type":"INT","description":"Higher values increase sensitivity to cutting-in or exiting vehicles"},
   {"n":"90","title":"LONG:AChangeCost2(30)","param":"AChangeCost2","min_value":10,"max_value":200,"step":1,"decimals":0,"value_type":"INT","description":"Higher values more smooth stopping"},
   {"n":"91","title":"Show Radar Info","param":"ShowRadarInfo","min_value":0,"max_value":3,"step":1,"decimals":0,"value_type":"INT","special_texts":{"0":"None","1":"Show","2":"+Relative Pos","3":"+Stopped Obstacle"},"description":"0:None, 1:display, 2:+relative pos, 3:stopped obstacle"},
-  {"n":"92","title":"Show Plot Mode","param":"ShowPlotMode","min_value":0,"max_value":5,"step":1,"decimals":0,"value_type":"INT","special_texts":{"0":"None","1":"Accel","2":"Accel+Vel","3":"Model","4":"Lead","5":"Lead2"},"description":"1:Accel,2:Accel+vel,3:Model,4:Lead,5:Lead2"}
+  {"n":"92","title":"Show Plot Mode","param":"ShowPlotMode","min_value":0,"max_value":5,"step":1,"decimals":0,"value_type":"INT","special_texts":{"0":"None","1":"Accel","2":"Accel+Vel","3":"Model","4":"Lead","5":"Lead2"},"description":"1:Accel,2:Accel+vel,3:Model,4:Lead,5:Lead2"},
+
+  {"n":"93","title":"Recording Time per Video(min)","param":"RecordingTimePerVideo","min_value":1,"max_value":120,"step":1,"decimals":0,"value_type":"INT","description":"Recording time per video(minute value)"},
+  {"n":"94","title":"Recording Max Files(EA)","param":"RecordingMaxFiles","min_value":0,"max_value":2000,"step":10,"decimals":0,"value_type":"INT","special_texts":{"0":"Unlimited"},"description":"Max number of files to record, if the files are full, the oldest file will be deleted."},
 ]
 
 
@@ -289,6 +296,9 @@ class KisaPilotLayout(Widget):
         #self._toggles[2],  # LFAButtonEngagement : bool
         self._toggles[2],  # KisaEnableLogger : bool
         self._buttons[0],  # Delete All Driving Logs
+        self._buttons[1],  # Delete All Recorded Videos
+        self._numeric[93],
+        self._numeric[94],
         #self._toggles[8],  # AutoEnable : bool
         #self._numeric[2],  # AutoEnableSpeed : int
         #self._numeric[10], # UseLegacyLaneModel : int

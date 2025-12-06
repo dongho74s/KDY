@@ -152,7 +152,7 @@ class AugmentedRoadView(CameraView):
   def _switch_stream_if_needed(self, sm):
     if ui_state.gearShifter == car.CarState.GearShifter.reverse:
       target = VisionStreamType.VISION_STREAM_DRIVER
-    elif sm['selfdriveState'].experimentalMode and WIDE_CAM in self.available_streams:
+    elif WIDE_CAM in self.available_streams:
       v_ego = sm['carState'].vEgo
       if v_ego < WIDE_CAM_MAX_SPEED:
         target = WIDE_CAM

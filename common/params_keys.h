@@ -307,6 +307,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"KisaBlindSpotDetect", {PERSISTENT, BOOL, "1"}},
     {"KisaSSHLegacy", {PERSISTENT, BOOL, "1"}},
     {"RecordingRunning", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL, "0"}},
+    {"RecordingTimePerVideo", {PERSISTENT, INT, "5"}},
+    {"RecordingMaxFiles", {PERSISTENT, INT, "200"}},
     {"OnRoadRefresh", {CLEAR_ON_MANAGER_START, BOOL, "0"}},
     {"CanParserResult", {PERSISTENT, STRING}},
     {"AChangeCost2", {PERSISTENT, INT, "50"}},
