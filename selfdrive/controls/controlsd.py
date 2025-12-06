@@ -56,8 +56,6 @@ class Controls:
 
     self.pose_calibrator = PoseCalibrator()
     self.calibrated_pose: Pose | None = None
-    
-    self.yStd = 0.0
 
     self.side_state = {
         "left":  {"main": {"dRel": None, "lat": None}, "sub": {"dRel": None, "lat": None}},
@@ -150,13 +148,7 @@ class Controls:
     lat_smooth_seconds = self.params.get("LatSmoothSec") * 0.01
     steer_actuator_delay = self.params.get("SteerActuatorDelay") * 0.01
     if steer_actuator_delay == 0.0:
-      steer_actuator_delay = self.sm['liveDelay'].lateralDelay 
-
-    if len(model_v2.position.yStd) > 0:
-      yStd = np.interp(steer_actuator_delay + lat_smooth_seconds, ModelConstants.T_IDXS, model_v2.position.yStd)
-      self.yStd = yStd * 0.02 + self.yStd * 0.98
-    else:
-      self.yStd = 0.0
+      steer_actuator_delay = self.sm['liveDelay'].lateralDelay
     
     if not CC.latActive:
       new_desired_curvature = self.curvature
@@ -182,7 +174,6 @@ class Controls:
                                                        curvature_limited, lat_delay)
     actuators.torque = float(steer)
     actuators.steeringAngleDeg = float(steeringAngleDeg)
-    actuators.yStd = float(self.yStd)
     # Ensure no NaNs/Infs
     for p in ACTUATOR_FIELDS:
       attr = getattr(actuators, p)

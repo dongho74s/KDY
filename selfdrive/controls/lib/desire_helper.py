@@ -413,7 +413,7 @@ class DesireHelper:
         # fade out over .5s
         self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
 
-        if 0.3 > self.lane_change_ll_prob >= 0.01:
+        if 0.2 > self.lane_change_ll_prob >= 0.01:
           self.lane_change_state = LaneChangeState.laneChangeMerging
 
         # 98% certainty

@@ -274,7 +274,7 @@ class GuiApplication:
       '-vf', 'vflip, format=yuv420p',  # Flip vertically and convert rgba to yuv420p
       '-c:v', 'libx264',        # Video codec
       '-preset', 'ultrafast',   # Encoding speed
-      '-crf', '28',             # video quality(0~51), 0=best, 51=worst, default: 23
+      '-crf', '26',             # video quality(0~51), 0=best, 51=worst, default: 23
       '-vsync', '2',            # Vsync
       '-y',                     # Overwrite existing file
       '-f', 'mp4',              # Output format

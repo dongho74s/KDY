@@ -421,9 +421,8 @@ struct CarControl {
 
     jerk @9: Float32;  # m/s^3
     aTarget @10: Float32;  # m/s^2
-    yStd @11: Float32;  
 
-    e2eStandstill @12: Bool;
+    e2eStandstill @11: Bool;
 
     enum LongControlState @0xe40f3a917d908282{
       off @0;

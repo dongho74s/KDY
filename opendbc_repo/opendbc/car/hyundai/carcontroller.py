@@ -88,7 +88,7 @@ class CarController(CarControllerBase):
 
     self.apply_angle_last = 0
     self.lkas_max_torque = 0
-    self.angle_max_torque = 240
+    self.angle_max_torque = 250
 
     self.canfd_debug = 0
     self.MainMode_ACC_trigger = 0
@@ -152,7 +152,6 @@ class CarController(CarControllerBase):
 
       self.canfd_debug = params.get("CanfdDebug")
       self.camera_scc_params = params.get("HyundaiCameraSCC")
-      self.traffic_detection_mode = Params().get("TrafficLightDetectMode")
 
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -194,24 +193,7 @@ class CarController(CarControllerBase):
       self.apply_angle_last = actuators.steeringAngleDeg
       self.lkas_max_torque = self.lkas_max_torque = max(self.lkas_max_torque - 20, 25)
     else:
-      if hud_control.modelDesire in [1,2]:
-        base_max_torque = self.angle_max_torque
-      else:
-        curv = abs(actuators.curvature)
-        y_std = actuators.yStd
-        #curvature_threshold = np.interp(y_std, [0.0, 0.2], [0.5, 0.006])
-        curvature_threshold = np.interp(y_std, [0.0, 0.1], [0.5, 0.006])
-
-        curve_scale = np.clip(curv / curvature_threshold, 0.0, 1.0)
-        torque_pts = [
-          (1 - curve_scale) * self.angle_max_torque + curve_scale * 25,
-          (1 - curve_scale) * self.angle_max_torque + curve_scale * 50,
-          self.angle_max_torque
-        ]        
-        #base_max_torque = np.interp(CS.out.vEgo * CV.MS_TO_KPH, [0, 30, 60], torque_pts)
-        base_max_torque = np.interp(CS.out.vEgo * CV.MS_TO_KPH, [0, 20, 30], torque_pts)
-      
-      target_torque = np.interp(abs(actuators.curvature), [0.0, 0.003, 0.006], [0.5 * base_max_torque, 0.75 * base_max_torque, base_max_torque])
+      target_torque = self.angle_max_torque
 
       max_steering_tq = self.params.STEER_DRIVER_ALLOWANCE * 0.7
       rate_ratio = max(20, max_steering_tq - abs(CS.out.steeringTorque)) / max_steering_tq
@@ -349,6 +331,7 @@ class CarController(CarControllerBase):
       if self.CP.carFingerprint in CAN_GEARS["send_mdps12"]:  # send mdps12 to LKAS to prevent LKAS error
         can_sends.append(hyundaican.create_mdps12(self.packer, self.frame, CS.mdps12))
 
+      casper_opt = self.CP.carFingerprint in (CAR.HYUNDAI_CASPER_EV)
       if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl:
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
         self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
@@ -357,7 +340,7 @@ class CarController(CarControllerBase):
         if camera_scc:
           can_sends.extend(hyundaican.create_acc_commands_scc(self.packer, CC.enabled, accel, self.hyundai_jerk, int(self.frame / 2),
                                                           hud_control, set_speed_in_units, stopping,
-                                                          CC.cruiseControl.override, use_fca, CS, self.soft_hold_mode))
+                                                          CC.cruiseControl.override, casper_opt, CS, self.soft_hold_mode))
         else:
           can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, self.hyundai_jerk, int(self.frame / 2),
                                                 hud_control, set_speed_in_units, stopping,
@@ -371,8 +354,10 @@ class CarController(CarControllerBase):
       # 5 Hz ACC options
       if self.frame % 20 == 0 and self.CP.openpilotLongitudinalControl:
         if camera_scc:
-          #if CS.scc13 is not None:
-          #  can_sends.append(hyundaican.create_acc_opt_copy(CS, self.packer))
+          if CS.scc13 is not None:
+            if casper_opt:
+              #can_sends.append(hyundaican.create_acc_opt_copy(CS, self.packer))
+              pass
           pass
         else:
           can_sends.extend(hyundaican.create_acc_opt(self.packer, self.CP))
