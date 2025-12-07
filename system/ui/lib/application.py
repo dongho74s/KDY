@@ -253,7 +253,7 @@ class GuiApplication:
     self._kisa_record_fail_count: int = 0
     self._kisa_record_fail_threshold: int = 10
     self._kisa_record_texture: rl.RenderTexture | None = None
-    self._target_width = int(1024)
+    self._target_width = int(960)
     self._target_height = int(self._target_width / 2)
 
   def _start_recording(self):
@@ -272,14 +272,14 @@ class GuiApplication:
         '-f', 'rawvideo', '-pix_fmt', 'rgba',
         '-s', f'{self._target_width}x{self._target_height}',
         '-framerate', str(self._input_fps),
-        '-thread_queue_size', '1024',
+        '-thread_queue_size', '512',
         '-r', str(self._input_fps),
         '-i', 'pipe:0',
         '-vf', 'vflip,format=yuv420p',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-x264-params', 'bframes=0:ref=1:subme=0:me=dia',
-        '-crf', '25',
+        '-crf', '26',
         '-threads', '0',
         '-vsync', '2',
         '-y',
