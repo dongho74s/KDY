@@ -279,7 +279,7 @@ class GuiApplication:
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-x264-params', 'bframes=0:ref=1:subme=0:me=dia',
-        '-crf', '28',
+        '-crf', '31',
         '-threads', '0',
         '-vsync', '2',
         '-y',
