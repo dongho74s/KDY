@@ -713,14 +713,14 @@ class DrawPlot:
     elif m == 4:
       data[0] = accel
       if sm.valid['radarState']:
-        lead = sm['radarState'].radarState.leadOne
+        lead = sm['radarState'].leadOne
         data[1] = lead.aLeadK if lead is not None else 0.0
         data[2] = lead.vRel if lead is not None else 0.0
       title = "4.Lead(Y:accel, G:a_lead, O:v_rel)"
     elif m == 5:
       data[0] = a_ego
       if sm.valid['radarState']:
-        lead = sm['radarState'].radarState.leadOne
+        lead = sm['radarState'].leadOne
         data[1] = lead.aLead if lead else 0.0
         data[2] = lead.jLead if lead else 0.0
       title = "5.Lead(Y:a_ego, G:a_lead, O:j_lead)"
