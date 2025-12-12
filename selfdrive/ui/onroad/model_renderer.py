@@ -142,7 +142,7 @@ class ModelRenderer(Widget):
     self._draw_path(sm)
 
     if render_lead_indicator and radar_state:
-      #self._draw_lead_indicator()
+      self._draw_lead_indicator()
       self._draw_radar_info(radar_state)
 
   def _update_raw_points(self, model):

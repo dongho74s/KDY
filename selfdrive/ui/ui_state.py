@@ -388,6 +388,7 @@ class UIState:
     self.show_radar_info = self.params.get("ShowRadarInfo")
     self.radar_lat_factor = self.params.get("RadarLatFactor")
     self.show_plot_mode = self.params.get("ShowPlotMode")
+    self.rec_status = self.params.get_bool("RecordingRunning")
 
     self._param_update_time = time.monotonic()
 

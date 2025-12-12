@@ -84,7 +84,7 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
 
   emergency_steering = False
   if CS.adrv_info_161 is not None:
-    values = CS.adrv_info_161
+    values = copy.copy(CS.adrv_info_161)
     emergency_steering = values["ALERTS_1"] in [11, 12, 13, 14, 15, 21, 22, 23, 24, 25, 26]
 
 
@@ -464,6 +464,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         #values["SET_ME_9"] = 17 # steer_temp관련없음, 계기판에러
         #values["SET_ME_2"] = 0   #커멘트해도 steer_temp에러남, 2값은 콤마에서 찾은거니...
         #values["DATA102"] = 0  # steer_temp관련없음
+        # values["SET_ME_2"] = 0x2
+        # values["SET_ME_FF"] = 0xff
+        # values["SET_ME_FC"] = 0xfc
+        # values["SET_ME_9"] = 0x9
+        values["NEW_SIGNAL_7"] = 0
         ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
 
       if CS.cruise_buttons_msg is not None:
@@ -564,13 +569,13 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
 
       if CS.adrv_info_200 is not None:
         values = copy.copy(CS.adrv_info_200)
-        values["TauGapSet"] = hud_control.leadDistanceBars
+        #values["TauGapSet"] = hud_control.leadDistanceBars
         ret.append(packer.make_can_msg("ADRV_0x200", CAN.ECAN, values))
 
       if CS.adrv_info_1ea is not None:
         values = copy.copy(CS.adrv_info_1ea)
-        #values["HDA_MODE1"] = 8
-        #values["HDA_MODE2"] = 1
+        values["HDA_MODE1"] = 8
+        values["HDA_MODE2"] = 0
         if values['LF_DETECT'] == 0 and hud_control.leadLeftDist > 0:
           values['LF_DETECT'] = 3 if hud_control.leadLeftDist > 30 else 4
           values['LF_DETECT_DISTANCE'] = hud_control.leadLeftDist
@@ -643,6 +648,19 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         if (left_lane_warning and not CS.out.leftBlinker) or (right_lane_warning and not CS.out.rightBlinker):
           values["VIBRATE"] = 1
         ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, values))
+
+    if frame % 20 == 0:
+      if CS.adrv_info_345 is not None:
+        values = copy.copy(CS.adrv_info_345)
+        # values['SET_ME_15'] = 0x15
+        ret.append(packer.make_can_msg("ADRV_0x345", CAN.ECAN, values))
+
+    if frame % 100 == 0:
+      if CS.adrv_info_1da is not None:
+        values = copy.copy(CS.adrv_info_1da)
+        # values['SET_ME_22'] = 0x22
+        # values['SET_ME_41'] = 0x41
+        ret.append(packer.make_can_msg("ADRV_0x1da", CAN.ECAN, values))
 
     if canfd_debug > 0:
       if frame % 20 == 0: # 아직 시험중..

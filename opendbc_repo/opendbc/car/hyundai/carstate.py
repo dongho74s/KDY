@@ -86,6 +86,8 @@ class CarState(CarStateBase):
     self.adrv_info_1ea = None
     self.adrv_info_160 = None
     self.adrv_info_162 = None
+    self.adrv_info_345 = None
+    self.adrv_info_1da = None
     self.hda_info_4a3 = None
     self.cluster_speed_limit_info = None
     self.new_msg_4b4 = None
@@ -153,6 +155,8 @@ class CarState(CarStateBase):
     self.ADRV_0x200 = True if 0x200 in fingerprints[cam_bus] else False
     self.ADRV_0x1ea = True if 0x1ea in fingerprints[cam_bus] else False
     self.ADRV_0x160 = True if 0x160 in fingerprints[cam_bus] else False
+    self.ADRV_0x345 = True if 0x345 in fingerprints[cam_bus] else False
+    self.ADRV_0x1DA = True if 0x1da in fingerprints[cam_bus] else False
     self.LFAHDA_CLUSTER = True if 480 in fingerprints[cam_bus] else False
     self.HDA_INFO_4A3 = True if 0x4a3 in fingerprints[pt_bus] else False
     self.CLU_SPD_LIM_INFO = True if 0x1fa in fingerprints[pt_bus] else False
@@ -542,6 +546,8 @@ class CarState(CarStateBase):
           ret.leftLatDist = self.adrv_info_1ea["LF_DETECT_LATERAL"]
           ret.rightLatDist = self.adrv_info_1ea["RF_DETECT_LATERAL"]
       self.adrv_info_160 = cp_cam.vl["ADRV_0x160"] if self.ADRV_0x160 else None
+      self.adrv_info_345 = cp_cam.vl["ADRV_0x345"] if self.ADRV_0x345 else None
+      self.adrv_info_1da = cp_cam.vl["ADRV_0x1da"] if self.ADRV_0x1DA else None
 
       self.hda_info_4a3 = cp.vl["HDA_INFO_4A3"] if self.HDA_INFO_4A3 else None
       if self.hda_info_4a3 is not None:

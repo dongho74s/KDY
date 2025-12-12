@@ -253,7 +253,7 @@ class GuiApplication:
     self._kisa_record_fail_count: int = 0
     self._kisa_record_fail_threshold: int = 10
     self._kisa_record_texture: rl.RenderTexture | None = None
-    self._target_width = int(960)
+    self._target_width = int(800)
     self._target_height = int(self._target_width / 2)
 
   def _start_recording(self):
@@ -272,16 +272,12 @@ class GuiApplication:
         '-f', 'rawvideo', '-pix_fmt', 'rgba',
         '-s', f'{self._target_width}x{self._target_height}',
         '-framerate', str(self._input_fps),
-        '-thread_queue_size', '1024',
         '-r', str(self._input_fps),
         '-i', 'pipe:0',
         '-vf', 'vflip,format=yuv420p',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
-        '-x264-params', 'bframes=0:ref=1:subme=0:me=dia',
-        '-crf', '31',
-        '-threads', '0',
-        '-vsync', '2',
+        '-crf', '28',
         '-y',
         '-f', 'mp4',
         str(self._kisa_record_file)
@@ -375,6 +371,13 @@ class GuiApplication:
 
     with self._kisa_record_queue.mutex:
       self._kisa_record_queue.queue.clear()
+    
+    if self._kisa_record_file and self._kisa_record_start_time:
+      duration = (datetime.now() - self._kisa_record_start_time).total_seconds()
+      print(f"Recording finished ({duration:.1f}s)")
+      print(f"Saved to: {self._kisa_record_file}")
+    else:
+      print("Recording finished")
 
   def _update_recording(self):
     running = self._params.get_bool("RecordingRunning")

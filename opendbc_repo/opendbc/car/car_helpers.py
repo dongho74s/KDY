@@ -159,7 +159,7 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
     carlog.error({"event": "car doesn't match any fingerprints", "fingerprints": repr(fingerprints)})
     candidate = "MOCK"
 
-  selected_car = Params().get("CarSelected3")
+  selected_car = Params().get("CarName")
   if selected_car:
     def find_car(name: str):
       from opendbc.car.hyundai.values import CAR as HYUNDAI

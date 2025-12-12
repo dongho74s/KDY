@@ -212,7 +212,7 @@ class DesireHelper:
     if self.frame % 100 == 0:
       self.laneChangeNeedTorque = self.params.get("LaneChangeNeedTorque")
       self.laneChangeBsd = self.params.get("LaneChangeBsd")
-      self.laneChangeDelay = self.params.get("LaneChangeDelay") * 0.1
+      self.laneChangeDelay = self.params.get("LaneChangeDelay")
       self.modelTurnSpeedFactor= self.params.get("ModelTurnSpeedFactor") * 0.1
 
     self.frame += 1

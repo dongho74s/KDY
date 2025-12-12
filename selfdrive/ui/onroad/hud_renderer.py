@@ -255,9 +255,9 @@ class HudRenderer(Widget):
     t = rl.get_time()
     center_x = rect.x + rect.width // 2
     center_y = rect.y + 200
-    size, thickness, freq, sway_amp = 100, 40, 6, 20
+    size, thickness, freq, sway_amp = 100, 50, 3, 20
     sway = sway_amp * math.sin(t * freq)
-    count, spacing = 5, 90
+    count, spacing = 3, 110
     base_color = rl.Color(230, 165, 0, 230)
     overlap = 0.25
 
@@ -360,7 +360,7 @@ class HudRenderer(Widget):
       second = int(ui_state.standstillElapsedTimer % 60)
       time_text = f"{minute:02d}:{second:02d}"
 
-      stop_x = rect.x + rect.width - UI_CONFIG.border_size - 645
+      stop_x = rect.x + rect.width - UI_CONFIG.border_size - 745
       stop_y = rect.y + UI_CONFIG.border_size + 320
 
       time_x = stop_x
