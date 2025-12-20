@@ -81,7 +81,7 @@ void main() {
 """
 
 DEFAULT_TEXT_SIZE = 60
-DEFAULT_TEXT_COLOR = rl.WHITE
+DEFAULT_TEXT_COLOR = rl.Color(255, 255, 255, int(255 * 0.9))
 
 # Qt draws fonts accounting for ascent/descent differently, so compensate to match old styles
 # The real scales for the fonts below range from 1.212 to 1.266
@@ -192,6 +192,7 @@ class MouseState:
           self._events.append(ev)
         self._prev_mouse_event[slot] = ev
 
+
 class GuiApplication:
   def __init__(self, width: int | None = None, height: int | None = None):
     self._fonts: dict[FontWeight, rl.Font] = {}
@@ -217,6 +218,7 @@ class GuiApplication:
     self._trace_log_callback = None
     self._modal_overlay = ModalOverlay()
     self._modal_overlay_shown = False
+    self._modal_overlay_tick: Callable[[], None] | None = None
 
     self._mouse = MouseState(self._scale)
     self._mouse_events: list[MouseEvent] = []
@@ -277,7 +279,7 @@ class GuiApplication:
         '-vf', 'vflip,format=yuv420p',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
-        '-crf', '28',
+        '-crf', '31',
         '-y',
         '-f', 'mp4',
         str(self._kisa_record_file)
@@ -536,10 +538,16 @@ class GuiApplication:
 
   def set_modal_overlay(self, overlay, callback: Callable | None = None):
     if self._modal_overlay.overlay is not None:
+      if hasattr(self._modal_overlay.overlay, 'hide_event'):
+        self._modal_overlay.overlay.hide_event()
+
       if self._modal_overlay.callback is not None:
         self._modal_overlay.callback(-1)
 
     self._modal_overlay = ModalOverlay(overlay=overlay, callback=callback)
+
+  def set_modal_overlay_tick(self, tick_function: Callable | None):
+    self._modal_overlay_tick = tick_function
 
   def set_should_render(self, should_render: bool):
     self._should_render = should_render
@@ -681,6 +689,9 @@ class GuiApplication:
 
         # Handle modal overlay rendering and input processing
         if self._handle_modal_overlay():
+          # Allow a Widget to still run a function while overlay is shown
+          if self._modal_overlay_tick is not None:
+            self._modal_overlay_tick()
           yield False
         else:
           yield True
@@ -789,6 +800,8 @@ class GuiApplication:
         # Clear the overlay and execute the callback
         original_modal = self._modal_overlay
         self._modal_overlay = ModalOverlay()
+        if hasattr(original_modal.overlay, 'hide_event'):
+          original_modal.overlay.hide_event()
         if original_modal.callback is not None:
           original_modal.callback(result)
       return True

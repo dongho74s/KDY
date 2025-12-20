@@ -87,8 +87,8 @@ class Controls:
     # Update VehicleModel
     lp = self.sm['liveParameters']
     x = max(lp.stiffnessFactor, 0.1)
-    sr = max(lp.steerRatio, 0.1) * self.params.get("SteerRatioRate") / 100.0
-    custom_sr = self.params.get("CustomSR") / 10.0
+    sr = max(lp.steerRatio, 0.1) * (self.params.get("SteerRatioRate")/100)
+    custom_sr = self.params.get("CustomSR")
     sr = max(custom_sr if custom_sr > 1.0 else sr, 0.1)
     self.VM.update_params(x, sr)
 
@@ -145,8 +145,8 @@ class Controls:
     lat_plan = self.sm['lateralPlan']
     curve_speed_abs = abs(self.sm['carrotMan'].vTurnSpeed)
     self.lanefull_mode_enabled = (lat_plan.useLaneLines and curve_speed_abs > self.params.get("UseLaneLineCurveSpeed"))
-    lat_smooth_seconds = self.params.get("LatSmoothSec") * 0.01
-    steer_actuator_delay = self.params.get("SteerActuatorDelay") * 0.01
+    lat_smooth_seconds = self.params.get("LatSmoothSec")
+    steer_actuator_delay = self.params.get("SteerActuatorDelay")
     if steer_actuator_delay == 0.0:
       steer_actuator_delay = self.sm['liveDelay'].lateralDelay
     

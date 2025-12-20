@@ -204,7 +204,7 @@ class CarrotServ:
     self.autoNaviSpeedCtrlEnd = float(self.params.get("AutoNaviSpeedCtrlEnd"))
     self.autoNaviSpeedCtrlMode = self.params.get("AutoNaviSpeedCtrlMode")
     self.autoNaviSpeedSafetyFactor = float(self.params.get("AutoNaviSpeedSafetyFactor")) * 0.01
-    self.autoNaviSpeedDecelRate = float(self.params.get("AutoNaviSpeedDecelRate")) * 0.01
+    self.autoNaviSpeedDecelRate = self.params.get("AutoNaviSpeedDecelRate")
     self.autoNaviCountDownMode = self.params.get("AutoNaviCountDownMode")
     self.turnSpeedControlMode= self.params.get("TurnSpeedControlMode")
     self.mapTurnSpeedFactor= self.params.get("MapTurnSpeedFactor") * 0.01
@@ -213,7 +213,7 @@ class CarrotServ:
     self.autoTurnMapChange = self.params.get("AutoTurnMapChange")
     self.autoTurnControl = self.params.get("AutoTurnControl")
     self.autoTurnControlTurnEnd = self.params.get("AutoTurnControlTurnEnd")
-    #self.autoNaviSpeedDecelRate = float(self.params.get("AutoNaviSpeedDecelRate")) * 0.01
+    #self.autoNaviSpeedDecelRate = self.params.get("AutoNaviSpeedDecelRate")
     self.autoCurveSpeedLowerLimit = int(self.params.get("AutoCurveSpeedLowerLimit"))
     self.is_metric = self.params.get_bool("IsMetric")
     self.autoRoadSpeedLimitOffset = self.params.get("AutoRoadSpeedLimitOffset")

@@ -190,8 +190,8 @@ class LongitudinalPlanner:
     self.a_desired = float(np.interp(self.dt, CONTROL_N_T_IDX, self.a_desired_trajectory))
     self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.a_desired + a_prev) / 2.0
 
-    longitudinalActuatorDelay = self.params.get("LongActuatorDelay")*0.01
-    vEgoStopping = self.params.get("VEgoStopping") * 0.01
+    longitudinalActuatorDelay = self.params.get("LongActuatorDelay")
+    vEgoStopping = self.params.get("VEgoStopping")
     action_t =  longitudinalActuatorDelay + DT_MDL
 
     output_a_target_mpc, output_should_stop_mpc, output_v_target_mpc, _ = get_accel_from_plan(self.v_desired_trajectory, self.a_desired_trajectory, CONTROL_N_T_IDX,

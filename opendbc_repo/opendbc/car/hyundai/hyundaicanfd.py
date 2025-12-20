@@ -574,8 +574,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
 
       if CS.adrv_info_1ea is not None:
         values = copy.copy(CS.adrv_info_1ea)
-        values["HDA_MODE1"] = 8
-        values["HDA_MODE2"] = 0
+        # values["HDA_MODE1"] = 8
+        # values["HDA_MODE2"] = 2
         if values['LF_DETECT'] == 0 and hud_control.leadLeftDist > 0:
           values['LF_DETECT'] = 3 if hud_control.leadLeftDist > 30 else 4
           values['LF_DETECT_DISTANCE'] = hud_control.leadLeftDist
@@ -594,6 +594,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values['RR_DETECT_DISTANCE'] = 2
           values['RR_DETECT_LATERAL'] = hud_control.leadRightLat2
         """
+        #values["CURRENT_LANE_NUMBER"]  차량이 현재 몇번째 차선에 있는 나타낸 표시 같음 약간의 시간차 있음. SET_ME_FF 대신 이거 같음
+        #values["TOTAL_LANE_COUNT"]  전체 레인 숫자 레인 갯수가 늘어나면 이것도 늘어남 추측이 맞는듯
+
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
 
       if CS.adrv_info_162 is not None:
@@ -662,10 +665,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
         # values['SET_ME_41'] = 0x41
         ret.append(packer.make_can_msg("ADRV_0x1da", CAN.ECAN, values))
 
-    if canfd_debug > 0:
-      if frame % 20 == 0: # 아직 시험중..
-        if CS.hda_info_4a3 is not None:
-          values = copy.copy(CS.hda_info_4a3)
+    if frame % 20 == 0: # 아직 시험중..
+      if CS.hda_info_4a3 is not None:
+        values = copy.copy(CS.hda_info_4a3)
+        if canfd_debug == 5:
           #if canfd_debug == 1:
           values["SIGNAL_0"] = 5
           values["NEW_SIGNAL_1"] = 4
@@ -674,7 +677,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control, disp_angle
           values["NEW_SIGNAL_4"] = 9
           values["NEW_SIGNAL_5"] = 0
           values["NEW_SIGNAL_6"] = 256
-          ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
+
+        ret.append(packer.make_can_msg("HDA_INFO_4A3", CAN.CAM, values))
 
   return ret
 

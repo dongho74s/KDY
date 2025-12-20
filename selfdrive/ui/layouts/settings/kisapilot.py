@@ -21,8 +21,11 @@ TEXT_COLOR = (255, 255, 255, 255)
 TEXT_SIZE = 55
 CORNER_RADIUS = 5
 
-SCHEMA_PATH = Path("/data/openpilot/selfdrive/kisapilot/param_schema.json")
-CMD_SCHEMA_PATH = Path("/data/openpilot/selfdrive/kisapilot/cmd_schema.json")
+KISA_DIR = Path(__file__).parents[3] / "kisapilot"
+
+SCHEMA_PATH = KISA_DIR / "param_schema.json"
+CMD_SCHEMA_PATH = KISA_DIR / "cmd_schema.json"
+
 with SCHEMA_PATH.open() as f:
   PARAM_SCHEMA = json.load(f)
 with CMD_SCHEMA_PATH.open() as f:

@@ -43,11 +43,11 @@ POLICY_METADATA_PATH = Path(__file__).parent / 'models/driving_policy_metadata.p
 LAT_SMOOTH_SECONDS = 0.13
 LONG_SMOOTH_SECONDS = 0.3
 MIN_LAT_CONTROL_SPEED = 0.3
-RECOVERY_POWER = 1.0 # The higher this number the more aggressively the model will recover to lanecenter, too high and it will ping-pong
+
 
 def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.ModelDataV2.Action,
                           lat_action_t: float, long_action_t: float, v_ego: float, lat_smooth_seconds: float, vEgoStopping: float) -> log.ModelDataV2.Action:
-    plan = model_output['plan'][0] + RECOVERY_POWER*model_output['planplus'][0]
+    plan = model_output['plan'][0]
     desired_accel, should_stop, _, desired_velocity_now = get_accel_from_plan(plan[:,Plan.VELOCITY][:,0],
                                                      plan[:,Plan.ACCELERATION][:,0],
                                                      ModelConstants.T_IDXS,
@@ -301,14 +301,14 @@ def main(demo=False):
   frame = 0
   custom_lat_delay = 0.0
   lat_smooth_seconds = LAT_SMOOTH_SECONDS
-  vEgoStopping = params.get("VEgoStopping") * 0.01
+  vEgoStopping = params.get("VEgoStopping")
   while True:
     frame += 1
     if frame % 100 == 0:
-      custom_lat_delay = params.get("SteerActuatorDelay") * 0.01
-      lat_smooth_seconds = params.get("LatSmoothSec") * 0.01
-      long_delay = params.get("LongActuatorDelay")*0.01
-      vEgoStopping = params.get("VEgoStopping") * 0.01
+      custom_lat_delay = params.get("SteerActuatorDelay")
+      lat_smooth_seconds = params.get("LatSmoothSec")
+      long_delay = params.get("LongActuatorDelay")
+      vEgoStopping = params.get("VEgoStopping")
       
     if custom_lat_delay > 0.0:
       lat_delay = custom_lat_delay + lat_smooth_seconds
