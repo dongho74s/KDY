@@ -6,10 +6,13 @@ import time
 import datetime
 import os
 import subprocess
+import pty
+import select
 
 import netifaces
 import ipaddress
 import requests
+import shutil
 
 import logging
 log = logging.getLogger('werkzeug')
@@ -36,12 +39,10 @@ MODELS_PATH = "/data/openpilot/selfdrive/modeld/models/"
 app = Flask(__name__)
 params = Params()
 
-# =========================
-# 연결 상태 관리
-# =========================
 client_connected = False
 last_seen = 0.0
 running_cmds = {}
+PTY_SESSIONS = {}
 
 
 def is_client_alive():
@@ -153,6 +154,94 @@ def list_files():
                 pass
         return jsonify({"path": path, "items": items})
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/file/explorer_delete", methods=["POST"])
+def file_delete():
+    data = request.get_json(silent=True) or {}
+    path = data.get("path")
+
+    if not path or not os.path.exists(path):
+        return jsonify({"error": "File or directory not found"}), 404
+
+    try:
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
+        print(f"Deleted: {path}")
+        return jsonify({"status": "deleted", "path": path})
+    except Exception as e:
+        print(f"Error deleting {path}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/file/explorer_rename", methods=["POST"])
+def file_rename():
+    data = request.get_json(silent=True) or {}
+    old_path = data.get("old_path")
+    new_name = data.get("new_name")
+
+    if not all([old_path, new_name]) or not os.path.exists(old_path):
+        return jsonify({"error": "Invalid arguments or file not found"}), 400
+
+    try:
+        directory = os.path.dirname(old_path)
+        new_path = os.path.join(directory, new_name)
+
+        os.rename(old_path, new_path)
+        print(f"Renamed: {old_path} -> {new_path}")
+        return jsonify({"status": "renamed", "new_path": new_path})
+    except Exception as e:
+        print(f"Error renaming {old_path}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/file/explorer_download", methods=["GET"])
+def file_download():
+    file_path = request.args.get("path")
+
+    if not file_path or not os.path.exists(file_path) or not os.path.isfile(file_path):
+        return "File not found or is not a file", 404
+
+    try:
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        print(f"Error sending file {file_path}: {e}")
+        return str(e), 500
+
+
+@app.route("/file/explorer_copy", methods=["POST"])
+def file_copy():
+    data = request.get_json(silent=True) or {}
+    source_path = data.get("source_path")
+    destination_folder = data.get("destination_path")
+
+    if not all([source_path, destination_folder]):
+        return jsonify({"error": "Source or destination path is missing"}), 400
+
+    try:
+        source_name = os.path.basename(source_path)
+        destination_path = os.path.join(destination_folder, source_name)
+
+        counter = 1
+        base_name, extension = os.path.splitext(source_name)
+        
+        while os.path.exists(destination_path):
+            if counter == 1:
+                new_name = f"{base_name} {extension}_copy"
+            else:
+                new_name = f"{base_name} {extension}_copy_{counter}"
+            
+            destination_path = os.path.join(destination_folder, new_name)
+            counter += 1
+        if os.path.isdir(source_path):
+            shutil.copytree(source_path, destination_path)
+        else:
+            shutil.copy2(source_path, destination_path)
+            
+        print(f"Copied: {source_path} -> {destination_path}")
+        return jsonify({"status": "copied"})
+    except Exception as e:
+        print(f"Error copying {source_path}: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/realdata_files', methods=['GET'])
@@ -367,7 +456,6 @@ def delete_files():
                 continue
 
             if os.path.isdir(item_path):
-                import shutil
                 shutil.rmtree(item_path)
                 print(f"Directory deleted: {item_path}")
                 deleted_count += 1
@@ -797,48 +885,86 @@ def cmd_list():
 
 
 import uuid
-
+current_working_directory = "/data/openpilot"
 @app.route("/cmd/run", methods=["POST"])
 def run_cmd():
+    global current_working_directory
+
     data = request.json
-    cmd_id = data.get("cmd")
+    cmd_id = data.get("id")
+    param = data.get("param")
 
     with open(CMD_SCHEMA_PATH) as f:
         schema = json.load(f)
-
     entry = next((c for c in schema if c["cmd"] == cmd_id), None)
-    if not entry:
-        return jsonify({"error": "cmd not found"}), 404
 
-    if entry.get("onroad") is False and params.get_bool("IsOnroad"):
-        return jsonify({"error": "blocked while driving"}), 403
+    command_array_to_run = []
+    reboot_after_complete = False
+    
+    # Home
+    if cmd_id == 'git_pull_reboot_force':
+        command_array_to_run = [
+            "bash", "-c",
+            "git pull --force && touch /data/ks && rm -f /data/openpilot/prebuilt"
+        ]
+        reboot_after_complete = True
+        
+    elif cmd_id == 'git_restore_reboot' and param:
+        command_array_to_run = [
+            "bash", "-c",
+            f"git reset --hard {param} && touch /data/ks && rm -f /data/openpilot/prebuilt"
+        ]
+        reboot_after_complete = True
 
-    cmd_uuid = str(uuid.uuid4())
-    running_cmds[cmd_uuid] = {
-        "output": "",
-        "done": False
-    }
+    elif cmd_id == 'git_log_export':
+        command_array_to_run = [
+            "bash", "-c",
+            "git log --date=human --pretty=format:'%h, %ad : %s' -n 30 > /data/params/d/GitCommits"
+        ]
+        reboot_after_complete = False
 
-    def runner():
-        proc = subprocess.Popen(
-            entry["exec"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
-        )
+    # Cmd
+    elif not command_array_to_run and entry and entry.get("exec"):
+        command_array_to_run = entry["exec"]
 
-        for line in proc.stdout:
-            running_cmds[cmd_uuid]["output"] += line
+    if command_array_to_run:
+        cmd_uuid = str(uuid.uuid4())
+        running_cmds[cmd_uuid] = {
+            "output": "",
+            "done": False
+        }
 
-        proc.wait()
-        running_cmds[cmd_uuid]["done"] = True
+        def runner():
+            try:
+                proc = subprocess.Popen(
+                    command_array_to_run,
+                    cwd="/data/openpilot",
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True
+                )
+                for line in proc.stdout:
+                    running_cmds[cmd_uuid]["output"] += line
+                proc.wait()
+                
+                if reboot_after_complete:
+                    running_cmds[cmd_uuid]["output"] += "\nTask complete. Rebooting the system in 3 seconds."
+                    time.sleep(3)
+                    os.system("sudo reboot")
 
-    threading.Thread(target=runner, daemon=True).start()
+            except Exception as e:
+                running_cmds[cmd_uuid]["output"] += f"\nAn error occurred during command execution: {e}"
+            finally:
+                running_cmds[cmd_uuid]["done"] = True
 
-    return jsonify({
-        "status": "started",
-        "id": cmd_uuid
-    })
+        threading.Thread(target=runner, daemon=True).start()
+
+        return jsonify({
+            "status": "started",
+            "id": cmd_uuid
+        })
+
+    return jsonify({"error": "cmd not found or invalid"}), 404
 
 
 @app.route("/cmd/exec_raw", methods=["POST"])
@@ -948,7 +1074,161 @@ def execute_fingerprint():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/cmd/terminal_start", methods=["POST"])
+def terminal_start():
+    cmd_uuid = str(uuid.uuid4())
+    print(f"[DEBUG] Terminal started. UUID={cmd_uuid}")
+
+    def pty_runner():
+        try:
+            pid, master_fd = pty.fork()
+        except OSError as e:
+            print(f"[ERROR] pty.fork failed: {e}")
+            return
+
+        if pid == 0:
+            try:
+                os.chdir("/data/openpilot")
+
+                os.environ["TERM"] = "xterm-256color"
+                os.environ["PS1"] = (
+                    "\033[01;32m\\u@\\h\033[00m:"
+                    "\033[01;34m\\w\033[00m\\$ "
+                )
+
+                os.execv(
+                    "/bin/bash",
+                    ["/bin/bash", "-l", "-i"]
+                )
+
+            except Exception as e:
+                with open("/data/log/kisa_agent_terminal_error.log", "a") as f:
+                    f.write(f"CRITICAL: bash exec failed: {e}\n")
+                os._exit(1)
+
+        else:
+            PTY_SESSIONS[cmd_uuid] = {
+                "pid": pid,
+                "fd": master_fd,
+                "output": "",
+                "lock": threading.Lock()
+            }
+            try:
+                while True:
+                    r, _, _ = select.select([master_fd], [], [], 1.0)
+                    if not r:
+                        try:
+                            if os.waitpid(pid, os.WNOHANG)[0] != 0:
+                                break
+                        except OSError:
+                            break
+                        continue
+
+                    try:
+                        data = os.read(master_fd, 4096)
+                        if not data:
+                            break
+                        if cmd_uuid in PTY_SESSIONS:
+                            PTY_SESSIONS[cmd_uuid]["output"] += data.decode(
+                                errors="ignore"
+                            )
+                        else:
+                            break
+                    except OSError:
+                        break
+            finally:
+                print(f"[DEBUG] Cleaning up session {cmd_uuid}")
+                if cmd_uuid in PTY_SESSIONS:
+                    try:
+                        os.close(master_fd)
+                    except OSError:
+                        pass
+                    del PTY_SESSIONS[cmd_uuid]
+
+    threading.Thread(target=pty_runner, daemon=True).start()
+
+    return jsonify({
+        "status": "started",
+        "id": cmd_uuid
+    })
+
+
+@app.route("/cmd/terminal_write", methods=["POST"])
+def terminal_write():
+    data = request.get_json(silent=True) or {}
+    cmd_uuid = data.get("id")
+    input_str  = data.get("input", "")
+
+    session = PTY_SESSIONS.get(cmd_uuid)
+    if not session:
+        return jsonify({"error": "invalid session id"}), 404
+
+    try:
+        os.write(session["fd"], input_str.encode())
+        return jsonify({"status": "ok"})
+    except (OSError, IOError) as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/cmd/terminal_read", methods=["GET"])
+def terminal_read():
+    cmd_uuid = request.args.get("id")
+
+    session = PTY_SESSIONS.get(cmd_uuid)
+    if not session:
+        return jsonify({
+            "output": "\n[Session closed]\n",
+            "done": True
+        })
+
+    with session["lock"]:
+        output = session["output"]
+        session["output"] = ""
+
+    return jsonify({
+        "output": output,
+        "done": False
+    })
+
+@app.route("/cmd/terminal_close", methods=["POST"])
+def terminal_close():
+    data = request.get_json(silent=True) or {}
+    cmd_uuid = data.get("id")
+
+    if not cmd_uuid or cmd_uuid not in PTY_SESSIONS:
+        return jsonify({"error": "session not found"}), 404
+
+    session = PTY_SESSIONS[cmd_uuid]
+    pid = session.get("pid")
+
+    print(f"[DEBUG] Cleaning up session {cmd_uuid}")
+
+    if pid:
+        try:
+            os.kill(pid, 15)
+        except ProcessLookupError:
+            pass
+        except OSError as e:
+            print(f"[ERROR] Failed to kill process {pid}: {e}")
+
+    if cmd_uuid in PTY_SESSIONS:
+        del PTY_SESSIONS[cmd_uuid]
+
+    return jsonify({"status": "closed"})
+
+
+# =========================
+# UDP 브로드캐스트
+# =========================
+_cached_broadcasts = []
+_cached_time = 0
+CACHE_TTL = 30  # seconds
 def get_broadcast_addresses():
+    global _cached_broadcasts, _cached_time
+
+    now = time.time()
+    if _cached_broadcasts and (now - _cached_time < CACHE_TTL):
+        return _cached_broadcasts
+
     results = []
 
     for iface in netifaces.interfaces():
@@ -972,12 +1252,11 @@ def get_broadcast_addresses():
             except Exception:
                 pass
 
+    _cached_broadcasts = results
+    _cached_time = now
+
     return results
 
-
-# =========================
-# UDP 브로드캐스트
-# =========================
 def udp_broadcast_loop():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -1001,8 +1280,6 @@ def udp_broadcast_loop():
                     print("UDP error:", e)
 
         time.sleep(UDP_INTERVAL)
-
-
 
 # =========================
 # Main

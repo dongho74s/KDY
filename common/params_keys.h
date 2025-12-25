@@ -269,7 +269,6 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CustomSteerDeltaDown", {PERSISTENT, INT, "0"}},
     {"CustomSteerDeltaUpLC", {PERSISTENT, INT, "0"}},
     {"CustomSteerDeltaDownLC", {PERSISTENT, INT, "0"}},
-    {"SpeedFromPCM", {PERSISTENT, INT, "2"}},
     {"SteerActuatorDelay", {PERSISTENT, FLOAT, "0.0"}},
     {"LatSmoothSec", {PERSISTENT, FLOAT, "0.13"}},
     {"MaxTimeOffroadMin", {PERSISTENT, INT, "60"}},

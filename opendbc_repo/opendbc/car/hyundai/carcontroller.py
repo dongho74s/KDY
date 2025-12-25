@@ -148,7 +148,6 @@ class CarController(CarControllerBase):
       self.button_spam1 = params.get("CruiseButtonTest1")
       self.button_spam2 = params.get("CruiseButtonTest2")
       self.button_spam3 = params.get("CruiseButtonTest3")
-      self.speed_from_pcm = params.get("SpeedFromPCM")
 
       self.canfd_debug = params.get("CanfdDebug")
       self.camera_scc_params = params.get("HyundaiCameraSCC")
@@ -527,9 +526,9 @@ class CarController(CarControllerBase):
           activate_cruise = True
       elif CC.cruiseControl.resume:
         send_button = Buttons.RES_ACCEL
-      elif target < current and current>= 31 and self.speed_from_pcm != 1:
+      elif target < current and current>= 31:
         send_button = Buttons.SET_DECEL
-      elif target > current and current < 160 and self.speed_from_pcm != 1:
+      elif target > current and current < 160:
         send_button = Buttons.RES_ACCEL
     elif CS.out.activateCruise: #CC.cruiseControl.activate:
       if (hud_control.leadVisible or v_ego_kph > 10.0) and self.activateCruise == 0:

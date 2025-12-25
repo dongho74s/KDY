@@ -148,6 +148,9 @@ function launch {
   if [ -z "$MODEL_NAME" ]; then MODEL_NAME=$(head -n 1 /data/openpilot/selfdrive/modeld/models/ModelList | awk '{print $3}'); fi
   echo -en "$MODEL_NAME" > /data/params/d/DrivingModel
 
+  # kisa agent start
+  python3 /data/openpilot/selfdrive/kisapilot/kisa_agent.py &
+
   # start manager
   cd system/manager
   if [ ! -f $DIR/prebuilt ]; then

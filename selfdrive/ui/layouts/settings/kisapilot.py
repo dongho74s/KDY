@@ -108,7 +108,7 @@ class KisaPilotLayout(Widget):
           min_value=meta.get("min_value"),
           max_value=meta.get("max_value"),
           step=meta.get("step", 1),
-          decimals=meta.get("decimals", 0),
+          decimal_places=meta.get("decimal_places", 0),
           special_texts=get_special_texts(meta.get("special_texts"))
         )
         self._param_mapping.append((key, w))

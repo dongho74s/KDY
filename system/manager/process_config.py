@@ -62,15 +62,6 @@ def or_(*fns):
 def and_(*fns):
   return lambda *args: operator.and_(*(fn(*args) for fn in fns))
 
-def is_kisa_agent_running() -> bool:
-  try:
-    out = subprocess.check_output(
-      ["pgrep", "-f", "kisa_agent"],
-      stderr=subprocess.DEVNULL,
-    )
-    return bool(out.strip())
-  except subprocess.CalledProcessError:
-    return False
 
 EnableLogger = Params().get_bool('KisaEnableLogger')
 procs = [
@@ -128,7 +119,6 @@ procs = [
 
   PythonProcess("fleet_manager", "selfdrive.frogpilot.fleetmanager.fleet_manager", always_run, enabled=not PC),
   PythonProcess("carrot_man", "selfdrive.carrot.carrot_man", always_run),#, enabled=not PC),
-  PythonProcess("kisa_agent", "selfdrive.kisapilot.kisa_agent", always_run, enabled=(not PC and not is_kisa_agent_running())),
 ]
 
 if EnableLogger:

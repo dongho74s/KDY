@@ -5,7 +5,7 @@
     "exec": [
       "sh",
       "-c",
-      "cd /data/openpilot && git pull && touch /data/ks"
+      "cd /data/openpilot && git pull && touch /data/ks && rm -f /data/openpilot/prebuilt"
     ],
     "description": {
       "ko": "깃 풀(git pull)을 수행합니다.",
@@ -20,7 +20,7 @@
     "exec": [
       "sh",
       "-c",
-      "cd /data/openpilot && git pull && touch /data/ks && echo -en 1 > /data/params/d/DoReboot"
+      "cd /data/openpilot && git pull && touch /data/ks && rm -f /data/openpilot/prebuilt && echo -en 1 > /data/params/d/DoReboot"
     ],
     "description": {
       "ko": "깃 풀 수행 후 안전하게 리부팅하며, 재부팅 후 자동으로 컴파일을 진행합니다. (부팅 중 에러 발생 시 파라미터 인식이 안 될 수 있으므로 필요 시 수동 재부팅하세요.)",
@@ -35,7 +35,7 @@
     "exec": [
       "sh",
       "-c",
-      "cd /data/openpilot && git pull && touch /data/ks && sudo reboot"
+      "cd /data/openpilot && git pull && touch /data/ks && rm -f /data/openpilot/prebuilt && sudo reboot"
     ],
     "description": {
       "ko": "깃 풀 수행 후 강제로 재부팅 합니다., 재부팅 후 자동으로 컴파일을 진행합니다.",
@@ -50,7 +50,7 @@
     "exec": [
       "sh",
       "-c",
-      "cd /data/openpilot && git reset --hard @{u} && touch /data/ks && echo -en 1 > /data/params/d/DoReboot"
+      "cd /data/openpilot && git fetch && git reset --hard $(git rev-parse --symbolic-full-name @{u}) && touch /data/ks && rm -f /data/openpilot/prebuilt && echo -en 1 > /data/params/d/DoReboot"
     ],
     "description": {
       "ko": "로컬 브랜치를 원격 브랜치 상태로 강제 초기화한 후 안전하게 리부팅합니다. 모든 로컬 수정 사항은 삭제됩니다.",
@@ -65,7 +65,7 @@
     "exec": [
       "sh",
       "-c",
-      "cd /data/openpilot && git show --stat HEAD~1 && git reset --hard HEAD~1 && touch /data/ks"
+      "cd /data/openpilot && git show --stat HEAD~1 && git reset --hard HEAD~1 && touch /data/ks && rm -f /data/openpilot/prebuilt"
     ],
     "description": {
       "ko": "로컬 브랜치 커밋을 한 단계 이전으로 되돌립니다. 여러 번 실행 가능하며, 최근 커밋 오류 발생 시 유용합니다.",
