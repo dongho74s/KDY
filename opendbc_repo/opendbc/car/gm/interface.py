@@ -16,7 +16,8 @@ NetworkLocation = structs.CarParams.NetworkLocation
 NON_LINEAR_TORQUE_PARAMS = {
   CAR.CHEVROLET_BOLT_EUV: [2.6531724862969748, 1.0, 0.1919764879840985, 0.009054123646805178],
   CAR.GMC_ACADIA: [4.78003305, 1.0, 0.3122, 0.05591772],
-  CAR.CHEVROLET_SILVERADO: [3.29974374, 1.0, 0.25571356, 0.0465122]
+  CAR.CHEVROLET_SILVERADO: [3.29974374, 1.0, 0.25571356, 0.0465122],
+  CAR.CHEVROLET_TRAILBLAZER: [3.5, 1.0, 0.24, 0.025]
 }
 
 
@@ -200,6 +201,11 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.CHEVROLET_TRAILBLAZER:
       ret.steerActuatorDelay = 0.2
+      ret.stoppingDecelRate = 0.8
+      ret.minEnableSpeed = -1.
+      ret.stopAccel = -0.5
+      ret.startingState = True
+      ret.startAccel = 1.0
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.CADILLAC_XT4:
